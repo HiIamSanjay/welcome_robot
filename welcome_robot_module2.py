@@ -20,6 +20,23 @@ def trigger_ai(source, query=None):
         messagebox.showinfo("AI Started", f"AI triggered via: {source}\nQuery: {query or 'No input'}")
         # In Module 3, send query to DeepSeek here
 
+def get_voice_input():
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("🎙️ Listening after face detection...")
+        try:
+            audio = recognizer.listen(source)
+            query = recognizer.recognize_google(audio)
+            print(f"🗨️ Recognized: {query}")
+            spoken_text_label.config(text=f"You said: {query}")
+            return query
+        except sr.UnknownValueError:
+            messagebox.showerror("Error", "Sorry, could not understand audio.")
+        except sr.RequestError:
+            messagebox.showerror("Error", "Speech recognition service failed.")
+        return None
+
+
 # --- Webcam detection loop ---
 def start_face_detection():
     cap = cv2.VideoCapture(0)
@@ -35,8 +52,10 @@ def start_face_detection():
         # Trigger if face is detected
         for (x, y, w, h) in faces:
             cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-            trigger_ai("Face Detection")
+            query = get_voice_input()
+            trigger_ai("Face Detection", query)
             break
+
 
         # Display in GUI
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
