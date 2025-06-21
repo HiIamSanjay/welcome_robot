@@ -79,7 +79,7 @@ SETTING GEMINI API KEY
 ---
 
 HOW TO RUN
-py welcome\_robot\_module3\_gemini.py
+py welcome_robot_module3_gemini.py
 
 Steps:
 
