@@ -98,7 +98,7 @@ Speak Now – trigger voice input
 
 ---
 
-**MODULE 4: MOVEMENT SERVER**
+**MODULE 5: MOVEMENT SERVER**
 
 Files:
 movement\_server.py – Flask server that receives `/move` POST requests
