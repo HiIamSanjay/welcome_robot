@@ -25,6 +25,7 @@ REQUIREMENTS
 INSTALLATION
 
 FOR WINDOWS:
+pip install flask
 pip install opencv-python
 pip install pillow
 pip install SpeechRecognition
@@ -45,6 +46,7 @@ sudo apt update && sudo apt upgrade -y
 sudo apt install python3-pyaudio python3-opencv ffmpeg espeak portaudio19-dev -y
 
 Then:
+pip install flask
 pip install opencv-python
 pip install pillow
 pip install SpeechRecognition
