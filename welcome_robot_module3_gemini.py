@@ -6,6 +6,10 @@ from PIL import Image, ImageTk
 import speech_recognition as sr
 import pyttsx3
 import google.generativeai as genai
+from gtts import gTTS
+import pygame
+import tempfile
+import os
 
 # --- Gemini API Key ---
 GEMINI_API_KEY = "AIzaSyBg_pr2pOdcPRuY1odTjAkS7Hs_gQ2EYyo"
@@ -18,32 +22,33 @@ engine = pyttsx3.init()
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 ai_triggered = False
 
-from gtts import gTTS
-import pygame
-import tempfile
-import os
-
 def speak_response(text):
-    try:
-        # Generate speech
-        tts = gTTS(text=text, lang='en')
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
-            temp_path = fp.name
-            tts.save(temp_path)
+    """Speak in a background thread so the GUI never blocks."""
+    def _play():
+        try:
+            # Generate speech
+            tts = gTTS(text=text, lang='en')
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
+                temp_path = fp.name
+                tts.save(temp_path)
 
-        # Initialize pygame mixer
-        pygame.mixer.init()
-        pygame.mixer.music.load(temp_path)
-        pygame.mixer.music.play()
+            # Play with pygame
+            pygame.mixer.init()
+            pygame.mixer.music.load(temp_path)
+            pygame.mixer.music.play()
+            while pygame.mixer.music.get_busy():
+                pygame.time.Clock().tick(10)   # yield 100 ms
 
-        # Wait for playback to finish
-        while pygame.mixer.music.get_busy():
-            continue
+            pygame.mixer.music.unload()
+            os.remove(temp_path)
 
-        pygame.mixer.music.unload()
-        os.remove(temp_path)
-    except Exception as e:
-        print(f"❌ TTS Error: {e}")
+        finally:
+            # 👉 allow the next interaction
+            global ai_triggered
+            ai_triggered = False
+
+    # Run the audio in its own daemon thread
+    threading.Thread(target=_play, daemon=True).start()
 
 # --- Call Gemini AI ---
 def get_gemini_response(user_input):
