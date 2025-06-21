@@ -1,6 +1,4 @@
-Here’s your updated **README** with **Module 4: Flask Movement Server** included — matching your formatting and without using asterisks (`*`):
 
----
 
 **WELCOME ROBOT – GEMINI & COMPUTER VISION EDITION**
 
@@ -147,6 +145,4 @@ MIT License – Free for personal and educational use
 
 Created by Sanjay | Powered by Python + Gemini AI
 
----
 
-Let me know if you want this in Markdown too (`README.md`).
