@@ -1,30 +1,35 @@
-WELCOME ROBOT – GEMINI & COMPUTER VISION EDITION
+Here’s your updated **README** with **Module 4: Flask Movement Server** included — matching your formatting and without using asterisks (`*`):
+
+---
+
+**WELCOME ROBOT – GEMINI & COMPUTER VISION EDITION**
 
 A cross-platform Python application that greets visitors, listens to their questions, and answers using Google Gemini 2.0 Flash. Combines real-time face detection, speech recognition, generative AI, and Text-to-Speech in a simple GUI.
 
 ---
 
-KEY FEATURES
+**KEY FEATURES**
 
-* Face Detection (OpenCV): Detects faces and starts interaction.
-* Speech Recognition: Captures voice and converts to text.
-* Gemini AI: Generates replies using Google Gemini 2.0 Flash.
-* TTS (Text-to-Speech): Speaks out replies using gTTS or pyttsx3.
-* GUI: Shows webcam, user speech, and AI response.
-
----
-
-REQUIREMENTS
-
-* Python 3.10 or 3.11 (Avoid 3.13)
-* Webcam and microphone
-* Works on Windows, Linux, and Raspberry Pi OS
+Face Detection (OpenCV): Detects faces and starts interaction
+Speech Recognition: Captures voice and converts to text
+Gemini AI: Generates replies using Google Gemini 2.0 Flash
+TTS (Text-to-Speech): Speaks out replies using gTTS or pyttsx3
+GUI: Shows webcam, user speech, and AI response
+Flask Movement API: Receives movement commands (forward, left, right, backward, stop) through HTTP requests
 
 ---
 
-INSTALLATION
+**REQUIREMENTS**
 
-FOR WINDOWS:
+Python 3.10 or 3.11 (Avoid 3.13)
+Webcam and microphone
+Works on Windows, Linux, and Raspberry Pi OS
+
+---
+
+**INSTALLATION**
+
+**FOR WINDOWS:**
 pip install flask
 pip install opencv-python
 pip install pillow
@@ -37,11 +42,10 @@ pip install gtts
 pip install pydub
 
 TTS Notes:
+pyttsx3 uses Microsoft SAPI5 (no extra setup needed).
+gTTS needs internet and works with pygame or pydub.
 
-* pyttsx3 uses Microsoft SAPI5 (no extra setup needed).
-* gTTS needs internet and works with pygame or pydub.
-
-FOR RASPBERRY PI:
+**FOR RASPBERRY PI:**
 sudo apt update && sudo apt upgrade -y
 sudo apt install python3-pyaudio python3-opencv ffmpeg espeak portaudio19-dev -y
 
@@ -58,19 +62,18 @@ pip install gtts
 pip install pydub
 
 TTS Notes:
-
-* pyttsx3 defaults to espeak.
-* gTTS works with pygame or pydub.
+pyttsx3 defaults to espeak.
+gTTS works with pygame or pydub.
 
 ---
 
-TTS SUMMARY
+**TTS SUMMARY**
 Windows: pyttsx3 + SAPI5 (offline) or gTTS (online)
 Raspberry Pi: pyttsx3 + espeak (offline) or gTTS (online)
 
 ---
 
-SETTING GEMINI API KEY
+**SETTING GEMINI API KEY**
 
 1. Get your API key from: [https://ai.google.dev/](https://ai.google.dev/)
 2. Option 1 – Set it permanently:
@@ -80,7 +83,8 @@ SETTING GEMINI API KEY
 
 ---
 
-HOW TO RUN
+**HOW TO RUN**
+
 py welcome\_robot\_module3\_gemini.py
 
 Steps:
@@ -91,35 +95,58 @@ Steps:
 4. Speak reply using TTS
 
 Buttons:
-
-* Submit Text – type and ask a question
-* Speak Now – trigger voice input
-
----
-
-TROUBLESHOOTING
-
-* pip not found: Try py -m pip install ...
-* pyaudio install error: Use wheel from Gohlke’s site
-* pygame error: Ensure audio device is free
-* Webcam not detected: Check connection
-* Gemini error: Check API key and quotas
+Submit Text – type and ask a question
+Speak Now – trigger voice input
 
 ---
 
-FILE STRUCTURE
+**MODULE 4: MOVEMENT SERVER**
+
+Files:
+movement\_server.py – Flask server that receives `/move` POST requests
+test\_movement\_client.py – Simulates directional control (without hardware)
+
+How it works:
+Run the Flask server in one terminal. Then test movements by running the client script.
+The server responds with action status JSON for: forward, left, right, backward, and stop.
+
+Why:
+This allows testing robot movement logic independently of hardware. Will be integrated with the Flutter app later.
+
+---
+
+**TROUBLESHOOTING**
+
+pip not found: Try py -m pip install ...
+pyaudio install error: Use wheel from Gohlke’s site
+pygame error: Ensure audio device is free
+Webcam not detected: Check connection
+Gemini error: Check API key and quotas
+ConnectionRefusedError: Ensure Flask server is running before client script
+
+---
+
+**FILE STRUCTURE**
+
 welcome\_robot/
-├─ welcome\_robot\_module1.py          # DeepSeek version
-├─ welcome\_robot\_module3\_gemini.py   # Gemini + gTTS version
-├─ README.txt                        # This file
+├─ welcome\_robot\_module1.py          → DeepSeek version
+├─ welcome\_robot\_module3\_gemini.py   → Gemini + gTTS version
+├─ movement\_server.py                → Flask backend for movement
+├─ test\_movement\_client.py           → Test script to simulate commands
+├─ README.txt                        → This file
 └─ docs/
-└─ demo\_face\_detection.jpg     # Optional screenshot
+└─ demo\_face\_detection.jpg        → Optional screenshot
 
 ---
 
-LICENSE
+**LICENSE**
+
 MIT License – Free for personal and educational use
 
 ---
 
 Created by Sanjay | Powered by Python + Gemini AI
+
+---
+
+Let me know if you want this in Markdown too (`README.md`).
