@@ -191,4 +191,4 @@ MIT License – Free for personal, educational, and academic use.
 
 ---
 
-Created by **Sanjay** | Powered by Python, Flutter & Gemini AI
+Created by **Sanjay, Sager, Rishi, Adithya** | Powered by Python, Flutter & Gemini AI
