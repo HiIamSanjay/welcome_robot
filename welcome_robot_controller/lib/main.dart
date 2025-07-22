@@ -30,7 +30,7 @@ class RobotControllerPage extends StatefulWidget {
 
 class _RobotControllerPageState extends State<RobotControllerPage> {
   // ⚠️ Replace with your PC's local IP
-  final String serverIp = '192.168.1.3';
+  final String serverIp = '192.168.152.133';
 
   late final String videoFeedUrl;
   late final String apiUrl;
