@@ -1,0 +1,26 @@
+name: robot_controller
+description: "A sleek controller for your robot with automatic network discovery."
+publish_to: 'none' 
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0' # Updated SDK constraint
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^0.13.6 # Latest http version
+  flutter_mjpeg: ^2.0.4 # Latest mjpeg version
+  flutter_joystick: ^0.2.2 
+  cupertino_icons: ^1.0.8
+  network_info_plus: ^5.0.3 # To get device's network info
+  udp: ^5.0.3 # For UDP broadcast to find the server
+  
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
