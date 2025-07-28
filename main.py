@@ -5,7 +5,7 @@ from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
 import speech_recognition as sr
 import google.generativeai as genai
-from gtts import gTTS
+import pyttsx3  # MODIFIED: Using pyttsx3 for TTS
 import pygame
 import io
 import time
@@ -25,7 +25,7 @@ TIST_WEBSITE_URL = "https://tistcochin.edu.in/"
 TIST_LOGO_URL = "https://tistcochin.edu.in/wp-content/uploads/2022/08/TISTlog-trans.png"
 
 # --- AI Model Constants ---
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-1.5-flash" # Corrected model name
 COLLEGE_CONTEXT = """
 # Toc H Institute of Science and Technology (TIST) - Detailed Information
 ## Overview
@@ -64,7 +64,6 @@ COLLEGE_CONTEXT = """
 - **Official Website**: tistcochin.edu.in
 """
 
-# --- **FIX**: Advanced Prompt with Location-Aware Persona ---
 GEMINI_PROMPT = f"""You are a multi-faceted Robot brain, the brain of a physical robot. Your primary goal is to determine the user's intent and respond in the correct persona.
 **Step 1: Analyze the User's Query**
 Classify the query into one of three categories:
@@ -103,7 +102,7 @@ class AIAssistantApp:
         self.ai_triggered = threading.Event()
         self.cap = None
 
-        if not GEMINI_API_KEY or GEMINI_API_KEY == "YOUR_API_KEY_HERE":
+        if not GEMINI_API_KEY or "YOUR_API_KEY" in GEMINI_API_KEY:
             messagebox.showerror("API Key Error", "Please paste your Gemini API key into the script.")
             root.destroy()
             return
@@ -113,9 +112,9 @@ class AIAssistantApp:
         self.recognizer = sr.Recognizer()
         self.gemini_model = genai.GenerativeModel(model_name=GEMINI_MODEL)
 
-        pygame.mixer.pre_init(44100, -16, 2, 512)
-        pygame.mixer.init()
-
+        # MODIFIED: Initialize the pyttsx3 engine
+        self.tts_engine = pyttsx3.init()
+        
         self.setup_ui()
         threading.Thread(target=self.load_logo_from_url, daemon=True).start()
         threading.Thread(target=self.update_video_feed, daemon=True).start()
@@ -169,7 +168,7 @@ class AIAssistantApp:
 
     def load_logo_from_url(self):
         try:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+            headers = {'User-Agent': 'Mozilla/5.0'}
             response = requests.get(TIST_LOGO_URL, headers=headers, stream=True)
             response.raise_for_status()
             logo_data = response.content
@@ -189,20 +188,16 @@ class AIAssistantApp:
         self.root.destroy()
         
     def speak_response(self, text):
-        def _play_in_memory():
+        # MODIFIED: This function now uses the pyttsx3 engine
+        def _play_with_pyttsx3():
             try:
-                tts = gTTS(text=text, lang='en')
-                mp3_fp = io.BytesIO()
-                tts.write_to_fp(mp3_fp)
-                mp3_fp.seek(0)
-                sound = pygame.mixer.Sound(mp3_fp)
-                sound.play()
-                pygame.time.wait(int(sound.get_length() * 1000))
+                self.tts_engine.say(text)
+                self.tts_engine.runAndWait()
             except Exception as e:
                 print(f"❌ Audio Error: {e}")
             finally:
                 self.listen_for_follow_up()
-        threading.Thread(target=_play_in_memory, daemon=True).start()
+        threading.Thread(target=_play_with_pyttsx3, daemon=True).start()
 
     def listen_for_follow_up(self):
         threading.Thread(target=self._handle_follow_up, daemon=True).start()
