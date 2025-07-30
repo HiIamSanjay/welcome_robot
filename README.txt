@@ -127,7 +127,32 @@ PyAudio errors on Windows: You may need to install a pre-compiled wheel file.
 Connection refused: Ensure the Flask server is running and your phone and Pi are on the same network.
 
 Webcam not showing: Try changing cv2.VideoCapture(0) to cv2.VideoCapture(1).
+Use a Virtual Camera (The Best Method)
+This is the most common and flexible solution. We will create a "virtual" webcam that mirrors the real one. Then, both of your programs can connect to the virtual camera, which allows multiple connections.
 
+Step 1: Install the Virtual Camera Tool
+Open a terminal and install the v4l2loopback utility.
+
+Bash
+
+sudo apt-get update
+sudo apt-get install v4l2loopback-utils
+Step 2: Create a Virtual Camera Device
+Load the kernel module to create a new virtual camera.
+
+Bash
+
+sudo modprobe v4l2loopback
+Step 3: Find Your Camera Devices
+Check which video devices you have. You should now see a new one.
+
+Bash
+
+ls /dev/video*
+You will likely see /dev/video0 (your real webcam) and /dev/video1 (your new virtual one).
+
+Step 4: Create a "Broadcaster" Script
+This new Python script will be the only program that touches your real camera. Its only job is to read frames from the real camera (/dev/video0) and send them to the virtual camera (/dev/video1).
 📄 License
 MIT License – Free for personal, educational, and academic use.
 
