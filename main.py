@@ -13,7 +13,7 @@ import webbrowser
 import requests
 
 # --- Configuration Constants ---
-GEMINI_API_KEY = "AIzaSyBg_pr2pOdcPRuY1odTjAkS7Hs_gQ2EYyo"
+GEMINI_API_KEY = "AIzaSyDv1KDhOOfv7lH3MT-hJJ8r2SD9oZ4_NXY"
 
 # --- Toc H Themed Constants ---
 BG_COLOR = "#0A2239"
