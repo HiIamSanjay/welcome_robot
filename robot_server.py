@@ -44,7 +44,7 @@ def run_discovery_service():
     """Broadcasts the server's IP address over the network using UDP."""
     host_ip = get_ip_address()
     broadcast_address = '<broadcast>' # Special address to send to all devices on the network
-    discovery_port = 6000 # The port the Flutter app will be listening on
+    discovery_port = 5000 # The port the Flutter app will be listening on
     
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
