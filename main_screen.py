@@ -5,12 +5,12 @@ from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
 import speech_recognition as sr
 import google.generativeai as genai
-import pyttsx3  # MODIFIED: Using pyttsx3 for TTS
-import pygame
-import io
+import pyttsx3
 import time
 import webbrowser
 import requests
+import socket
+from enum import Enum
 
 # --- Configuration Constants ---
 GEMINI_API_KEY = "AIzaSyDv1KDhOOfv7lH3MT-hJJ8r2SD9oZ4_NXY"
@@ -23,9 +23,14 @@ FONT_FACE = "Segoe UI"
 FOLLOW_UP_TIMEOUT = 10
 TIST_WEBSITE_URL = "https://tistcochin.edu.in/"
 TIST_LOGO_URL = "https://tistcochin.edu.in/wp-content/uploads/2022/08/TISTlog-trans.png"
+FACE_DETECTION_COOLDOWN = 10 
+
+# --- IPC Configuration ---
+EYE_ANIMATION_HOST = '127.0.0.1'
+EYE_ANIMATION_PORT = 12345
 
 # --- AI Model Constants ---
-GEMINI_MODEL = "gemini-2.5-flash" # Corrected model name
+GEMINI_MODEL = "gemini-2.5-flash" 
 COLLEGE_CONTEXT = """
 # Toc H Institute of Science and Technology (TIST) - Detailed Information
 ## Overview
@@ -95,14 +100,28 @@ Classify the query into one of three categories:
 ---
 """
 
+class AppState(Enum):
+    IDLE = 1
+    FACE_DETECTED = 2
+    PROCESSING_AI = 3
+    SPEAKING = 4
+    LISTENING_FOR_FOLLOW_UP = 5
+    COOLDOWN = 6
+
 class AIAssistantApp:
     def __init__(self, root):
         self.root = root
         self.text_input_visible = False
-        self.ai_triggered = threading.Event()
         self.cap = None
+        self.state = AppState.IDLE
+        self.state_timer = 0
+        self.last_query = ""
 
+        self._log("-----------------------------------------")
+        self._log("🤖 AI Assistant application starting up...")
+        
         if not GEMINI_API_KEY or "YOUR_API_KEY" in GEMINI_API_KEY:
+            self._log("❌ FATAL: Gemini API key not found.")
             messagebox.showerror("API Key Error", "Please paste your Gemini API key into the script.")
             root.destroy()
             return
@@ -111,14 +130,28 @@ class AIAssistantApp:
         self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
         self.recognizer = sr.Recognizer()
         self.gemini_model = genai.GenerativeModel(model_name=GEMINI_MODEL)
-
-        # MODIFIED: Initialize the pyttsx3 engine
         self.tts_engine = pyttsx3.init()
         
         self.setup_ui()
+        self._log("🖥️ UI setup complete.")
         threading.Thread(target=self.load_logo_from_url, daemon=True).start()
-        threading.Thread(target=self.update_video_feed, daemon=True).start()
+        threading.Thread(target=self.background_voice_listener, daemon=True).start()
+        self.update_state_machine()
+        
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def _log(self, message):
+        """Prints a message with a timestamp for debugging."""
+        print(f"[{time.strftime('%H:%M:%S')}] {message}")
+
+    def _send_eye_command(self, command):
+        """Sends a command to the eye animation script via UDP."""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.sendto(command.encode('utf-8'), (EYE_ANIMATION_HOST, EYE_ANIMATION_PORT))
+                self._log(f"👁️ Sent eye command: '{command}'")
+        except Exception as e:
+            self._log(f"❌ Could not send command to eye animation: {e}")
 
     def setup_ui(self):
         self.root.title("TIST AI Assistant")
@@ -142,14 +175,17 @@ class AIAssistantApp:
         self.spoken_text_label.pack(fill="x", padx=20, pady=(0, 5))
         self.response_label = ttk.Label(content_frame, text="Welcome to the TIST AI Assistant.", wraplength=700, anchor="center", font=(FONT_FACE, 14, "italic"))
         self.response_label.pack(fill="x", padx=20, pady=10)
+        
         self.text_input_frame = ttk.Frame(self.bottom_frame, style="TFrame")
         self.input_box = ttk.Entry(self.text_input_frame, font=(FONT_FACE, 14), width=40)
         self.input_box.pack(side="left", fill="x", expand=True, ipady=5)
         submit_button = ttk.Button(self.text_input_frame, text="➜", command=self.on_submit_text, width=3)
         submit_button.pack(side="left", padx=(10, 0))
+        
         button_bar_frame = ttk.Frame(self.bottom_frame, style="TFrame")
         button_bar_frame.pack(side="bottom", fill="x", pady=5)
         button_bar_frame.columnconfigure((0, 1, 2), weight=1)
+
         text_btn = ttk.Button(button_bar_frame, text="Text Input 📝", command=self.toggle_text_input)
         text_btn.grid(row=0, column=0, sticky="ew", padx=5)
         voice_btn = ttk.Button(button_bar_frame, text="Speak Now 🎤", command=self.on_start_voice_input)
@@ -157,7 +193,9 @@ class AIAssistantApp:
         web_btn = ttk.Button(button_bar_frame, text="Visit Website 🌐", command=self.open_website)
         web_btn.grid(row=0, column=2, sticky="ew", padx=5)
 
+    # ### MODIFICATION START: Restored missing functions ###
     def toggle_text_input(self):
+        """Shows or hides the text input field."""
         if self.text_input_visible:
             self.text_input_frame.pack_forget()
             self.text_input_visible = False
@@ -165,6 +203,155 @@ class AIAssistantApp:
             self.text_input_frame.pack(side="top", fill="x", pady=5)
             self.input_box.focus_set()
             self.text_input_visible = True
+
+    def on_submit_text(self):
+        """Handles the text input submission."""
+        if self.state not in [AppState.IDLE, AppState.COOLDOWN]:
+            messagebox.showinfo("Busy", "The assistant is currently busy. Please wait.")
+            return
+
+        user_input = self.input_box.get().strip()
+        if user_input:
+            self.input_box.delete(0, tk.END)
+            if self.text_input_visible:
+                self.toggle_text_input()
+            
+            self._log(f"⌨️ Text input received: '{user_input}'")
+            self.last_query = user_input
+            self.process_ai_query()
+        else:
+            messagebox.showwarning("Input Missing", "Please enter a question.")
+    # ### MODIFICATION END ###
+
+    def on_start_voice_input(self):
+        """Handles the 'Speak Now' button press."""
+        if self.state == AppState.IDLE or self.state == AppState.COOLDOWN:
+            self._log("🎤 Voice button pressed. Listening for query...")
+            self.spoken_text_label.config(text="Listening...")
+            self.state = AppState.FACE_DETECTED
+            self.state_timer = time.time()
+            self._send_eye_command("happy")
+        else:
+            messagebox.showinfo("Busy", "The assistant is currently busy. Please wait.")
+
+    def background_voice_listener(self):
+        """A dedicated thread that listens for audio and processes it based on the current app state."""
+        self._log("👂 Background voice listener started.")
+        mic = sr.Microphone()
+        with mic as source:
+            self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+
+        while True:
+            if self.state == AppState.FACE_DETECTED or self.state == AppState.LISTENING_FOR_FOLLOW_UP:
+                self._log("🎤 Listening for speech...")
+                try:
+                    with mic as source:
+                        audio = self.recognizer.listen(source, phrase_time_limit=10)
+                    self._log("🎤 Audio captured, recognizing...")
+                    text = self.recognizer.recognize_google(audio)
+                    self._log(f"🎤 Recognition successful: '{text}'")
+                    self.last_query = text
+                    self.root.after(0, self.process_ai_query)
+                except sr.UnknownValueError:
+                    self._log("🎤 Recognition failed: Could not understand audio.")
+                except Exception as e:
+                    self._log(f"🎤 Listener error: {e}")
+            
+            time.sleep(0.1)
+
+    def process_ai_query(self):
+        """Handles the AI interaction once a query has been received."""
+        self.state = AppState.PROCESSING_AI
+        self.spoken_text_label.config(text=f"You: {self.last_query}")
+        self.response_label.config(text="Thinking...")
+        self._send_eye_command("nodding")
+        
+        try:
+            self._log("🧠 Querying Gemini model...")
+            full_prompt = f"{GEMINI_PROMPT}\n\nUser Query: \"{self.last_query}\""
+            response = self.gemini_model.generate_content(full_prompt)
+            clean_text = response.text.replace('*', '').strip()
+            self._log(f"🤖 AI says: {clean_text}")
+            self.response_label.config(text=clean_text)
+            
+            self.state = AppState.SPEAKING
+            threading.Thread(target=self.speak_response, args=(clean_text,), daemon=True).start()
+        except Exception as e:
+            self._log(f"❌ Gemini Error: {e}")
+            self.response_label.config(text="Sorry, an error occurred.")
+            self.state = AppState.COOLDOWN
+            self.state_timer = time.time()
+
+    def speak_response(self, text):
+        """Uses pyttsx3 to speak the text. This runs in its own thread."""
+        self._log("🔊 TTS thread started.")
+        try:
+            self.tts_engine.say(text)
+            self.tts_engine.runAndWait()
+        finally:
+            self._log("🔊 TTS finished. Switching to follow-up state.")
+            self.state = AppState.LISTENING_FOR_FOLLOW_UP
+            self.state_timer = time.time()
+
+    def update_state_machine(self):
+        """This is the new main loop, running every 100ms on the main thread."""
+        now = time.time()
+
+        if self.state == AppState.IDLE:
+            pass # In IDLE, we only act when the video feed detects a face
+
+        elif self.state == AppState.FACE_DETECTED:
+            if now - self.state_timer > 5:
+                self._log("🎤 Timed out waiting for initial query.")
+                self.state = AppState.COOLDOWN
+                self.state_timer = time.time()
+                self._send_eye_command("neutral")
+
+        elif self.state == AppState.LISTENING_FOR_FOLLOW_UP:
+            if now - self.state_timer > FOLLOW_UP_TIMEOUT:
+                self._log(f"🏁 Follow-up timed out after {FOLLOW_UP_TIMEOUT}s.")
+                self.state = AppState.COOLDOWN
+                self.state_timer = time.time()
+                self._send_eye_command("neutral")
+        
+        elif self.state == AppState.COOLDOWN:
+            self.spoken_text_label.config(text="Waiting for interaction...")
+            if now - self.state_timer > FACE_DETECTION_COOLDOWN:
+                self._log("⏱️ Cooldown finished. Returning to IDLE state.")
+                self.state = AppState.IDLE
+        
+        self.update_video_frame()
+        self.root.after(100, self.update_state_machine)
+        
+    def update_video_frame(self):
+        """Grabs and displays a single frame from the webcam."""
+        if not self.cap or not self.cap.isOpened():
+            self.cap = cv2.VideoCapture(0)
+            if not self.cap.isOpened():
+                self._log("❌ Cannot access webcam")
+                return
+
+        ret, frame = self.cap.read()
+        if ret:
+            # Face detection is now part of the video update loop but only changes state in IDLE
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = self.face_cascade.detectMultiScale(gray, 1.3, 5)
+            
+            if self.state == AppState.IDLE and len(faces) > 0:
+                self._log("🙂 Face detected. Switching to listen for query.")
+                self.state = AppState.FACE_DETECTED
+                self.state_timer = time.time()
+                self.spoken_text_label.config(text="Face detected. Ask a question.")
+                self._send_eye_command("happy")
+
+            for (x, y, w, h) in faces:
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 90, 158), 3)
+            
+            frame = cv2.resize(frame, (640, 480))
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            imgtk = ImageTk.PhotoImage(image=Image.fromarray(rgb))
+            self.video_label.imgtk = imgtk
+            self.video_label.config(image=imgtk)
 
     def load_logo_from_url(self):
         try:
@@ -177,121 +364,16 @@ class AIAssistantApp:
             self.logo_photo = ImageTk.PhotoImage(logo_image)
             self.logo_label.config(image=self.logo_photo)
         except requests.exceptions.RequestException as e:
-            print(f"❌ Could not download logo: {e}")
+            self._log(f"❌ Could not download logo: {e}")
             self.logo_label.config(text="TIST", font=(FONT_FACE, 20, "bold"))
 
     def open_website(self):
         webbrowser.open_new_tab(TIST_WEBSITE_URL)
 
     def on_closing(self):
+        self._log("🛑 Close button clicked. Shutting down.")
         if self.cap: self.cap.release()
         self.root.destroy()
-        
-    def speak_response(self, text):
-        # MODIFIED: This function now uses the pyttsx3 engine
-        def _play_with_pyttsx3():
-            try:
-                self.tts_engine.say(text)
-                self.tts_engine.runAndWait()
-            except Exception as e:
-                print(f"❌ Audio Error: {e}")
-            finally:
-                self.listen_for_follow_up()
-        threading.Thread(target=_play_with_pyttsx3, daemon=True).start()
-
-    def listen_for_follow_up(self):
-        threading.Thread(target=self._handle_follow_up, daemon=True).start()
-
-    def _handle_follow_up(self):
-        query = self.get_voice_input(
-            prompt="I'm listening for a follow-up...", 
-            listen_timeout=FOLLOW_UP_TIMEOUT
-        )
-        if query:
-            self.root.after(0, lambda: self.trigger_ai("Follow-up", query))
-        else:
-            print("🕒 Follow-up timeout. Reverting to face detection.")
-            self.spoken_text_label.config(text="Waiting for interaction...")
-            self.ai_triggered.clear()
-
-    def get_gemini_response(self, user_input):
-        try:
-            full_prompt = f"{GEMINI_PROMPT}\n\nUser Query: \"{user_input}\""
-            response = self.gemini_model.generate_content(full_prompt)
-            return response.text
-        except Exception as e:
-            print(f"❌ Gemini Error: {e}")
-            return "Sorry, there was an error connecting to my services."
-
-    def trigger_ai(self, source, query=None):
-        if self.ai_triggered.is_set() and source != "Follow-up": return
-        self.ai_triggered.set()
-        print(f"✅ AI triggered via: {source}\n🗨️ User said: {query}")
-        self.spoken_text_label.config(text=f"You: {query}")
-        self.response_label.config(text="Thinking...")
-        response_text = self.get_gemini_response(query)
-        clean_text = response_text.replace('*', '').strip()
-        print(f"🤖 AI says: {clean_text}")
-        self.response_label.config(text=f"{clean_text}")
-        self.speak_response(clean_text)
-
-    def get_voice_input(self, prompt="Listening...", listen_timeout=5):
-        with sr.Microphone() as source:
-            self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
-            self.spoken_text_label.config(text=f"🎙️ {prompt}")
-            self.root.update_idletasks()
-            try:
-                audio = self.recognizer.listen(source, timeout=listen_timeout, phrase_time_limit=10)
-                return self.recognizer.recognize_google(audio)
-            except sr.WaitTimeoutError:
-                return None
-            except sr.UnknownValueError:
-                self.spoken_text_label.config(text="Could not understand audio. Try again.")
-                return None
-            except sr.RequestError:
-                messagebox.showerror("Error", "Speech recognition service is unavailable.")
-                return None
-
-    def update_video_feed(self):
-        self.cap = cv2.VideoCapture(0)
-        while self.root.winfo_exists():
-            ret, frame = self.cap.read()
-            if not ret: break
-            
-            if not self.ai_triggered.is_set():
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                faces = self.face_cascade.detectMultiScale(gray, 1.3, 5)
-                for (x, y, w, h) in faces:
-                    cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 90, 158), 3)
-                    if not self.ai_triggered.is_set():
-                        query = self.get_voice_input(prompt="Face detected. Ask a question.")
-                        if query: self.trigger_ai("Face Detection", query)
-                        break
-            
-            if ret:
-                frame = cv2.resize(frame, (640, 480))
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                imgtk = ImageTk.PhotoImage(image=Image.fromarray(rgb))
-                self.video_label.imgtk = imgtk
-                self.video_label.config(image=imgtk)
-        if self.cap: self.cap.release()
-
-    def on_submit_text(self):
-        user_input = self.input_box.get().strip()
-        if user_input:
-            self.input_box.delete(0, tk.END)
-            if self.text_input_visible:
-                self.toggle_text_input()
-            self.trigger_ai("Text Input", user_input)
-        else:
-            messagebox.showwarning("Input Missing", "Please enter a question.")
-
-    def on_start_voice_input(self):
-        if self.ai_triggered.is_set():
-            messagebox.showinfo("Busy", "The assistant is currently speaking.")
-            return
-        query = self.get_voice_input()
-        if query: self.trigger_ai("Voice Button", query)
 
 
 if __name__ == "__main__":
