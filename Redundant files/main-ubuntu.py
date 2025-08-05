@@ -13,7 +13,7 @@ import webbrowser
 import requests
 
 # --- Configuration Constants ---
-GEMINI_API_KEY = "AIzaSyBg_pr2pOdcPRuY1odTjAkS7Hs_gQ2EYyo"
+GEMINI_API_KEY = "AIzaSyDv1KDhOOfv7lH3MT-hJJ8r2SD9oZ4_NXY"
 
 # --- Toc H Themed Constants ---
 BG_COLOR = "#0A2239"
@@ -25,7 +25,7 @@ TIST_WEBSITE_URL = "https://tistcochin.edu.in/"
 TIST_LOGO_URL = "https://tistcochin.edu.in/wp-content/uploads/2022/08/TISTlog-trans.png"
 
 # --- AI Model Constants ---
-GEMINI_MODEL = "gemini-1.5-flash" # Corrected model name
+GEMINI_MODEL = "gemini-2.5-flash" # Corrected model name
 COLLEGE_CONTEXT = """
 # Toc H Institute of Science and Technology (TIST) - Detailed Information
 ## Overview

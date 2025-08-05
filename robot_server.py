@@ -11,7 +11,7 @@ import serial # Import the serial library for Arduino communication
 try:
     # ❗ IMPORTANT: Replace 'COM3' with your Arduino's actual COM port.
     # On Linux or Mac, the port name might look like '/dev/ttyUSB0' or '/dev/tty.usbmodem...'.
-    arduino_port = 'COM3'
+    arduino_port = 'COM4'
     baud_rate = 9600
     arduino = serial.Serial(port=arduino_port, baudrate=baud_rate, timeout=.1)
     print(f"✅ Successfully connected to Arduino on {arduino_port}")
@@ -44,7 +44,7 @@ def run_discovery_service():
     """Broadcasts the server's IP address over the network using UDP."""
     host_ip = get_ip_address()
     broadcast_address = '<broadcast>' # Special address to send to all devices on the network
-    discovery_port = 6000 # The port the Flutter app will be listening on
+    discovery_port = 5000 # The port the Flutter app will be listening on
     
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
