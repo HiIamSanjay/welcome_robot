@@ -11,7 +11,7 @@ import serial # Import the serial library for Arduino communication
 try:
     # ❗ IMPORTANT: Replace 'COM3' with your Arduino's actual COM port.
     # On Linux or Mac, the port name might look like '/dev/ttyUSB0' or '/dev/tty.usbmodem...'.
-    arduino_port = 'COM4'
+    arduino_port = '/dev/ttyUSB0'
     baud_rate = 9600
     arduino = serial.Serial(port=arduino_port, baudrate=baud_rate, timeout=.1)
     print(f"✅ Successfully connected to Arduino on {arduino_port}")
@@ -93,7 +93,7 @@ def move():
 def video_feed():
     """Streams the webcam feed as an MJPEG stream."""
     def generate_frames():
-        cap = cv2.VideoCapture(0) # Use camera 0
+        cap = cv2.VideoCapture(3) # Use camera 0
         if not cap.isOpened():
             print("❌ Cannot access webcam")
             return

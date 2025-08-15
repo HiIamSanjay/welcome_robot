@@ -43,7 +43,7 @@ SAD_KEYWORDS = ["sad", "sadness", "unhappy", "depressed", "sorry", "unfortunatel
 PAMPER_KEYWORDS = ["pamper", "pampered", "cute", "adorable", "sweet", "cuddle"]
 
 # --- AI Model Constants ---
-GEMINI_MODEL = "gemini-1.5-flash" 
+GEMINI_MODEL = "gemini-2.5-flash" 
 COLLEGE_CONTEXT = """
 # Toc H Institute of Science and Technology (TIST) - Detailed Information
 ## Overview
@@ -369,7 +369,7 @@ class AIAssistantApp:
     def update_video_frame(self):
         # ... (this function remains the same) ...
         if not self.cap or not self.cap.isOpened():
-            self.cap = cv2.VideoCapture(0)
+            self.cap = cv2.VideoCapture(2)
             if not self.cap.isOpened():
                 self._log("❌ Cannot access webcam")
                 return
