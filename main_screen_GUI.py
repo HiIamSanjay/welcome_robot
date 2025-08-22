@@ -213,7 +213,7 @@ class AIAssistantApp:
 
     def update_video_frame(self):
         if not self.cap or not self.cap.isOpened():
-            self.cap = cv2.VideoCapture(0)
+            self.cap = cv2.VideoCapture(2)
             if not self.cap.isOpened():
                 self._log("❌ Cannot access webcam")
                 return
