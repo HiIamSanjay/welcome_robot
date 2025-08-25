@@ -35,14 +35,16 @@ print(f"✅ Eye Animation is listening for commands on port {UDP_PORT}")
 # --- Configuration ---
 
 # Colors
-HAPPY_COLOR = (0, 255, 0) # Green for happy emotion
 EYE_COLOR = (0, 136, 255) # Blue for neutral/default
+HAPPY_COLOR = (0, 136, 255) # Happy is also blue now
+GREET_COLOR = (0, 255, 0) # Green for the initial greeting
 LID_COLOR = (0, 0, 0)
 BG_COLOR = (0, 0, 0)
-SMILE_COLOR = HAPPY_COLOR # Smile will also be green
+SMILE_COLOR = HAPPY_COLOR # Smile will be blue for happy emotion
 ANGRY_COLOR = (255, 0, 0)
 PAMPER_COLOR = (255, 100, 100)
 TEAR_COLOR = (173, 216, 230)
+
 
 # Eye Parameters
 EYE_WIDTH, EYE_HEIGHT = 180, 180
@@ -236,6 +238,20 @@ def draw_happy_emotion(current_time, start_time, progress):
         pygame.draw.polygon(screen, SMILE_COLOR, poly_points)
         for pos, radius in end_caps: pygame.draw.circle(screen, SMILE_COLOR, pos, radius)
 
+def draw_greet_emotion(progress):
+    """Draws a simple green smiling face for greeting."""
+    for dx in [-EYE_SPACING, EYE_SPACING]:
+        base_x = WIDTH // 2 + dx - EYE_WIDTH // 2
+        draw_rounded_eye(screen, base_x, EYE_Y_POS, EYE_WIDTH, EYE_HEIGHT, EYE_CORNER_RADIUS, color=GREET_COLOR)
+        draw_lids(screen, base_x, EYE_Y_POS, EYE_WIDTH, EYE_HEIGHT, squint_progress=progress * 0.4)
+
+    smile_data = generate_smile_data(progress)
+    if smile_data:
+        poly_points, end_caps = smile_data
+        pygame.draw.polygon(screen, GREET_COLOR, poly_points)
+        for pos, radius in end_caps: pygame.draw.circle(screen, GREET_COLOR, pos, radius)
+
+
 def draw_angry_emotion(progress):
     """Draws the shaking, slanted-eye angry face."""
     shake_offset = (random.uniform(-2, 2), random.uniform(-2, 2)) if progress > 0.5 else (0,0)
@@ -317,11 +333,11 @@ while running:
         print(f"Received command: {command}")
         is_nodding = (command == "nodding")
         # Map commands to states
-        if command in ["happy", "angry", "sad", "pamper", "fear", "disgust", "surprise"]:
+        if command in ["happy", "angry", "sad", "pamper", "fear", "disgust", "surprise", "greet"]:
             current_emotion = command
             emotion_start_time = time.time()
             emotion_anim_progress = 0
-        elif command in ["nodding", "neutral", "greet"]:
+        elif command in ["nodding", "neutral"]:
             current_emotion = "neutral" # These use the neutral draw function
     
     except BlockingIOError:
@@ -336,7 +352,7 @@ while running:
         if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
             running = False
         if event.type == pygame.KEYDOWN:
-            key_map = {'h': "happy", 'a': "angry", 's': "sad", 'p': "pamper"}
+            key_map = {'h': "happy", 'a': "angry", 's': "sad", 'p': "pamper", 'g': "greet"}
             key_name = pygame.key.name(event.key)
             if key_name in key_map:
                 emotion = key_map[key_name]
@@ -398,6 +414,8 @@ while running:
 
     if current_emotion == "happy":
         draw_happy_emotion(now, emotion_start_time, emotion_anim_progress)
+    elif current_emotion == "greet":
+        draw_greet_emotion(emotion_anim_progress)
     elif current_emotion == "angry":
         draw_angry_emotion(emotion_anim_progress)
     elif current_emotion == "sad":
