@@ -41,8 +41,8 @@ TIST_WEBSITE_URL = "https://tistcochin.edu.in/"
 TIST_LOGO_URL = "https://tistcochin.edu.in/wp-content/uploads/2022/08/TISTlog-trans.png"
 FACE_DETECTION_COOLDOWN = 30
 PHRASE_TIME_LIMIT = 15
-PAUSE_THRESHOLD = 5.0  # This is the value for wait time
-EMOTION_CONFIRMATION_DURATION = 1.0
+PAUSE_THRESHOLD = 2.0  # This is the value for wait time
+EMOTION_CONFIRMATION_DURATION = 0.1
 
 # --- IPC Configuration ---
 EYE_ANIMATION_HOST = '127.0.0.1'
@@ -59,7 +59,7 @@ STOP_MIRROR_KEYWORDS = ["stop mirroring", "stop copying", "that's enough"]
 
 
 # --- AI Model Constants ---
-GEMINI_MODEL = "gemini-1.5-flash"  # Updated to a more recent model
+GEMINI_MODEL = "gemini-2.5-flash"  # Updated to a more recent model
 COLLEGE_CONTEXT = """
 # Toc H Institute of Science and Technology (TIST) - Detailed Information
 ## Overview
@@ -202,12 +202,18 @@ class AIAssistantApp:
         self.setup_ui()
         self._log("🖥️ UI setup complete.")
 
-        threading.Thread(target=self.load_logo_from_url, daemon=True).start()
-        threading.Thread(target=self.background_voice_listener,
-                         daemon=True).start()
+        # --- THREADING FIX: Schedule background tasks to start after main loop begins ---
+        self.root.after(100, self.start_background_tasks)
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.update_state_machine()
+
+    def start_background_tasks(self):
+        """Starts tasks that run in the background."""
+        self._log("🚀 Starting background tasks...")
+        threading.Thread(target=self.load_logo_from_url, daemon=True).start()
+        threading.Thread(target=self.background_voice_listener,
+                         daemon=True).start()
 
     def _log(self, message):
         print(f"[{time.strftime('%H:%M:%S')}] {message}")
