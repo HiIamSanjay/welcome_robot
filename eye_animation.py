@@ -9,7 +9,7 @@ import time
 import random
 import numpy as np
 import math
-import socket # MODIFICATION: Import socket library
+import socket  # MODIFICATION: Import socket library
 
 # --- Pygame Initialization ---
 pygame.init()
@@ -28,19 +28,20 @@ UDP_PORT = 12345        # The port for communication
 # Create and bind the UDP socket to listen for commands
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server_socket.bind((UDP_HOST, UDP_PORT))
-server_socket.setblocking(False)  # IMPORTANT: Prevents the animation from freezing while waiting for a message
+# IMPORTANT: Prevents the animation from freezing while waiting for a message
+server_socket.setblocking(False)
 print(f"✅ Eye Animation is listening for commands on port {UDP_PORT}")
 # ### MODIFICATION END ###
 
 # --- Configuration ---
 
 # Colors
-EYE_COLOR = (0, 136, 255) # Blue for neutral/default
-HAPPY_COLOR = (0, 136, 255) # Happy is also blue now
-GREET_COLOR = (0, 255, 0) # Green for the initial greeting
+EYE_COLOR = (0, 136, 255)  # Blue for neutral/default
+HAPPY_COLOR = (0, 136, 255)  # Happy is also blue now
+GREET_COLOR = (0, 255, 0)  # Green for the initial greeting
 LID_COLOR = (0, 0, 0)
 BG_COLOR = (0, 0, 0)
-SMILE_COLOR = HAPPY_COLOR # Smile will be blue for happy emotion
+SMILE_COLOR = HAPPY_COLOR  # Smile will be blue for happy emotion
 ANGRY_COLOR = (255, 0, 0)
 PAMPER_COLOR = (255, 100, 100)
 TEAR_COLOR = (173, 216, 230)
@@ -76,7 +77,7 @@ PAMPER_CONFIG = {
 }
 
 # --- State Management Variables ---
-current_emotion = "neutral" 
+current_emotion = "neutral"
 emotion_anim_progress = 0
 emotion_start_time = 0
 mode = 1
@@ -84,7 +85,7 @@ mode_start_time = time.time()
 next_mode_time = time.time() + random.uniform(8, 15)
 
 # ### MODIFICATION START ###
-is_nodding = False # New state for nodding behavior
+is_nodding = False  # New state for nodding behavior
 # ### MODIFICATION END ###
 
 # Neutral State Movement
@@ -108,7 +109,8 @@ blink_interval = random.uniform(3, 6)
 # --- Data Generation Functions ---
 # (No changes needed in data generation functions)
 def generate_smile_data(progress, y_offset=0):
-    if progress <= 0: return None
+    if progress <= 0:
+        return None
     num_points, max_thickness, min_ratio = 50, 20, 0.25
     x_vals = np.linspace(-1, 1, num_points)
     y_center = -(x_vals**4 * 0.8 + x_vals**2 * 0.2 - 0.7) * 50 * progress
@@ -116,8 +118,10 @@ def generate_smile_data(progress, y_offset=0):
     thickness = thickness_profile * max_thickness * progress
     y_upper, y_lower = y_center - thickness/2, y_center + thickness/2
     smile_width, smile_y_pos = 320, HEIGHT // 2 + 100 + y_offset
-    upper_points = [(WIDTH//2 + x*smile_width/2, smile_y_pos + y) for x,y in zip(x_vals, y_upper)]
-    lower_points = [(WIDTH//2 + x*smile_width/2, smile_y_pos + y) for x,y in zip(x_vals, y_lower)]
+    upper_points = [(WIDTH//2 + x*smile_width/2, smile_y_pos + y)
+                    for x, y in zip(x_vals, y_upper)]
+    lower_points = [(WIDTH//2 + x*smile_width/2, smile_y_pos + y)
+                    for x, y in zip(x_vals, y_lower)]
     polygon_points = upper_points + lower_points[::-1]
     cap_radius = thickness[0] / 2
     left_cap_pos = (upper_points[0][0], upper_points[0][1] + cap_radius)
@@ -125,41 +129,59 @@ def generate_smile_data(progress, y_offset=0):
     end_caps_data = [(left_cap_pos, cap_radius), (right_cap_pos, cap_radius)]
     return polygon_points, end_caps_data
 
-def generate_angry_mouth_points(progress, offset=(0,0)):
-    if progress <= 0: return None
+
+def generate_angry_mouth_points(progress, offset=(0, 0)):
+    if progress <= 0:
+        return None
     points = [(-1, 0.5), (-0.5, -0.5), (0, 0.5), (0.5, -0.5), (1, 0.5)]
     mouth_width, mouth_height, mouth_y_pos = 150, 25 * progress, HEIGHT // 2 + 80
-    line_points = [(WIDTH/2 + p[0]*mouth_width/2 + offset[0], mouth_y_pos + p[1]*mouth_height + offset[1]) for p in points]
+    line_points = [(WIDTH/2 + p[0]*mouth_width/2 + offset[0],
+                    mouth_y_pos + p[1]*mouth_height + offset[1]) for p in points]
     return line_points
 
 
 # --- Component Drawing Functions ---
 # (No changes needed in component drawing functions)
-def draw_rounded_eye(surface, x, y, width, height, radius, color=EYE_COLOR, offset=(0,0)):
-    pygame.draw.rect(surface, color, (x + offset[0], y + offset[1], width, height), border_radius=radius)
+def draw_rounded_eye(surface, x, y, width, height, radius, color=EYE_COLOR, offset=(0, 0)):
+    pygame.draw.rect(
+        surface, color, (x + offset[0], y + offset[1], width, height), border_radius=radius)
 
-def draw_circle_eye(surface, x, y, diameter, color=EYE_COLOR, offset=(0,0)):
-    pygame.draw.ellipse(surface, color, (x + offset[0], y + offset[1], diameter, diameter))
+
+def draw_circle_eye(surface, x, y, diameter, color=EYE_COLOR, offset=(0, 0)):
+    pygame.draw.ellipse(
+        surface, color, (x + offset[0], y + offset[1], diameter, diameter))
+
 
 def draw_lids(surface, x, y, width, height, blink_progress=0, squint_progress=0):
     if blink_progress > 0:
         lid_height = int(height * blink_progress)
-        pygame.draw.rect(surface, LID_COLOR, (x, y, width, lid_height), border_radius=EYE_CORNER_RADIUS)
-        pygame.draw.rect(surface, LID_COLOR, (x, y + height - lid_height, width, lid_height), border_radius=EYE_CORNER_RADIUS)
+        pygame.draw.rect(surface, LID_COLOR, (x, y, width,
+                         lid_height), border_radius=EYE_CORNER_RADIUS)
+        pygame.draw.rect(surface, LID_COLOR, (x, y + height - lid_height,
+                         width, lid_height), border_radius=EYE_CORNER_RADIUS)
     if squint_progress > 0:
         squint_height = int(height * squint_progress)
-        pygame.draw.rect(surface, LID_COLOR, (x, y + height - squint_height, width, squint_height), border_radius=EYE_CORNER_RADIUS)
+        pygame.draw.rect(surface, LID_COLOR, (x, y + height - squint_height,
+                         width, squint_height), border_radius=EYE_CORNER_RADIUS)
 
-def draw_frown(surface, x, y, width, height, progress, color, offset=(0,0)):
-    if progress <= 0: return
-    frown_rect = pygame.Rect(x - width//2 + offset[0], y + offset[1], width, height)
+
+def draw_frown(surface, x, y, width, height, progress, color, offset=(0, 0)):
+    if progress <= 0:
+        return
+    frown_rect = pygame.Rect(
+        x - width//2 + offset[0], y + offset[1], width, height)
     pygame.draw.arc(surface, color, frown_rect, 0, math.pi, int(10 * progress))
 
-def draw_tear(surface, x, y, size, progress, offset=(0,0)):
+
+def draw_tear(surface, x, y, size, progress, offset=(0, 0)):
     cfg = SAD_CONFIG
-    if progress < cfg["tear_start_progress"]: return
-    current_size = size * ((progress - cfg["tear_start_progress"]) / (1 - cfg["tear_start_progress"]))
-    if current_size <= 0: return
+    if progress < cfg["tear_start_progress"]:
+        return
+    current_size = size * \
+        ((progress - cfg["tear_start_progress"]) /
+         (1 - cfg["tear_start_progress"]))
+    if current_size <= 0:
+        return
     glisten_factor = abs(math.sin(time.time() * 5)) * 0.5 + 0.75
     glisten_color = (min(255, int(TEAR_COLOR[0] * glisten_factor)),
                      min(255, int(TEAR_COLOR[1] * glisten_factor)),
@@ -174,6 +196,7 @@ def draw_tear(surface, x, y, size, progress, offset=(0,0)):
     pygame.draw.polygon(surface, glisten_color, triangle_points)
     pygame.draw.circle(surface, glisten_color, circle_center, radius)
 
+
 def draw_blush(surface, x, y, radius_x, radius_y):
     pygame.draw.ellipse(surface, PAMPER_COLOR, (x, y, radius_x, radius_y))
 
@@ -187,89 +210,114 @@ def draw_neutral_emotion():
     y_offset = 0
     # If nodding is active, calculate a vertical offset using a sine wave
     if is_nodding:
-        y_offset = 20 * math.sin(time.time() * 5) # 20 is amplitude, 10 is speed
+        # 20 is amplitude, 10 is speed
+        y_offset = 20 * math.sin(time.time() * 5)
 
     left_style, right_style = 'normal', 'normal'
     current_move = movement_order[current_index]
-    if mode == 2: left_style, right_style = 'enlarged', 'circle'
-    elif current_move == 'left': left_style, right_style = 'circle', 'enlarged'
-    elif current_move == 'right': left_style, right_style = 'enlarged', 'circle'
-    
+    if mode == 2:
+        left_style, right_style = 'enlarged', 'circle'
+    elif current_move == 'left':
+        left_style, right_style = 'circle', 'enlarged'
+    elif current_move == 'right':
+        left_style, right_style = 'enlarged', 'circle'
+
     for i, style in enumerate([left_style, right_style]):
         dx = -EYE_SPACING if i == 0 else EYE_SPACING
         # Add the main y_offset to all eye positions
         base_x = WIDTH // 2 + dx - EYE_WIDTH // 2 + current_position
-        base_y = EYE_Y_POS + y_offset 
+        base_y = EYE_Y_POS + y_offset
 
         if style == 'normal':
-            draw_rounded_eye(screen, base_x, base_y, EYE_WIDTH, EYE_HEIGHT, EYE_CORNER_RADIUS)
-            draw_lids(screen, base_x, base_y, EYE_WIDTH, EYE_HEIGHT, lid_progress)
+            draw_rounded_eye(screen, base_x, base_y, EYE_WIDTH,
+                             EYE_HEIGHT, EYE_CORNER_RADIUS)
+            draw_lids(screen, base_x, base_y, EYE_WIDTH,
+                      EYE_HEIGHT, lid_progress)
         elif style == 'enlarged':
             ew, eh = int(EYE_WIDTH * 1.3), int(EYE_HEIGHT * 1.3)
-            ex, ey = base_x - (ew - EYE_WIDTH) // 2, base_y - (eh - EYE_HEIGHT) // 2
+            ex, ey = base_x - (ew - EYE_WIDTH) // 2, base_y - \
+                (eh - EYE_HEIGHT) // 2
             draw_rounded_eye(screen, ex, ey, ew, eh, EYE_CORNER_RADIUS)
             draw_lids(screen, ex, ey, ew, eh, lid_progress)
         elif style == 'circle':
             d = min(EYE_WIDTH, EYE_HEIGHT)
-            ex, ey = base_x + (EYE_WIDTH - d) // 2, base_y + (EYE_HEIGHT - d) // 2
+            ex, ey = base_x + (EYE_WIDTH - d) // 2, base_y + \
+                (EYE_HEIGHT - d) // 2
             draw_circle_eye(screen, ex, ey, d)
             draw_lids(screen, ex, ey, d, d, lid_progress)
 # ### MODIFICATION END ###
+
 
 def draw_happy_emotion(current_time, start_time, progress):
     """Draws the bouncy, smiling happy face."""
     cfg = HAPPY_CONFIG
     time_elapsed = current_time - start_time
-    bounce_offset = cfg["bounce_amp"] * math.sin(time_elapsed * cfg["bounce_speed"]) * progress
-    scale_effect = 1 + cfg["scale_amp"] * math.sin(time_elapsed * cfg["scale_speed"]) * progress
-    
-    new_width, new_height = int(EYE_WIDTH * scale_effect), int(EYE_HEIGHT * scale_effect)
+    bounce_offset = cfg["bounce_amp"] * \
+        math.sin(time_elapsed * cfg["bounce_speed"]) * progress
+    scale_effect = 1 + cfg["scale_amp"] * \
+        math.sin(time_elapsed * cfg["scale_speed"]) * progress
+
+    new_width, new_height = int(
+        EYE_WIDTH * scale_effect), int(EYE_HEIGHT * scale_effect)
 
     for dx in [-EYE_SPACING, EYE_SPACING]:
         base_x = WIDTH // 2 + dx - EYE_WIDTH // 2
         new_x = base_x - (new_width - EYE_WIDTH) // 2
         new_y = EYE_Y_POS - (new_height - EYE_HEIGHT) // 2
-        draw_rounded_eye(screen, new_x, new_y + bounce_offset, new_width, new_height, EYE_CORNER_RADIUS, color=HAPPY_COLOR)
-        draw_lids(screen, new_x, new_y + bounce_offset, new_width, new_height, squint_progress=progress * cfg["squint"])
+        draw_rounded_eye(screen, new_x, new_y + bounce_offset, new_width,
+                         new_height, EYE_CORNER_RADIUS, color=HAPPY_COLOR)
+        draw_lids(screen, new_x, new_y + bounce_offset, new_width,
+                  new_height, squint_progress=progress * cfg["squint"])
 
     smile_data = generate_smile_data(progress, y_offset=bounce_offset)
     if smile_data:
         poly_points, end_caps = smile_data
         pygame.draw.polygon(screen, SMILE_COLOR, poly_points)
-        for pos, radius in end_caps: pygame.draw.circle(screen, SMILE_COLOR, pos, radius)
+        for pos, radius in end_caps:
+            pygame.draw.circle(screen, SMILE_COLOR, pos, radius)
+
 
 def draw_greet_emotion(progress):
     """Draws a simple green smiling face for greeting."""
     for dx in [-EYE_SPACING, EYE_SPACING]:
         base_x = WIDTH // 2 + dx - EYE_WIDTH // 2
-        draw_rounded_eye(screen, base_x, EYE_Y_POS, EYE_WIDTH, EYE_HEIGHT, EYE_CORNER_RADIUS, color=GREET_COLOR)
-        draw_lids(screen, base_x, EYE_Y_POS, EYE_WIDTH, EYE_HEIGHT, squint_progress=progress * 0.4)
+        draw_rounded_eye(screen, base_x, EYE_Y_POS, EYE_WIDTH,
+                         EYE_HEIGHT, EYE_CORNER_RADIUS, color=GREET_COLOR)
+        draw_lids(screen, base_x, EYE_Y_POS, EYE_WIDTH,
+                  EYE_HEIGHT, squint_progress=progress * 0.4)
 
     smile_data = generate_smile_data(progress)
     if smile_data:
         poly_points, end_caps = smile_data
         pygame.draw.polygon(screen, GREET_COLOR, poly_points)
-        for pos, radius in end_caps: pygame.draw.circle(screen, GREET_COLOR, pos, radius)
+        for pos, radius in end_caps:
+            pygame.draw.circle(screen, GREET_COLOR, pos, radius)
 
 
 def draw_angry_emotion(progress):
     """Draws the shaking, slanted-eye angry face."""
-    shake_offset = (random.uniform(-2, 2), random.uniform(-2, 2)) if progress > 0.5 else (0,0)
+    shake_offset = (random.uniform(-2, 2), random.uniform(-2, 2)
+                    ) if progress > 0.5 else (0, 0)
     for i, dx in enumerate([-EYE_SPACING, EYE_SPACING]):
         eye_x = WIDTH // 2 + dx - EYE_WIDTH // 2
         slant = 60 * progress
         x_off, y_off = shake_offset
-        if i == 0: # Left Eye
-            p1, p2 = (eye_x + x_off, EYE_Y_POS + y_off), (eye_x + x_off + EYE_WIDTH, EYE_Y_POS + y_off + slant)
-            p3, p4 = (eye_x + x_off + EYE_WIDTH, EYE_Y_POS + y_off + EYE_HEIGHT), (eye_x + x_off, EYE_Y_POS + y_off + EYE_HEIGHT)
-        else: # Right Eye
-            p1, p2 = (eye_x + x_off, EYE_Y_POS + y_off + slant), (eye_x + x_off + EYE_WIDTH, EYE_Y_POS + y_off)
-            p3, p4 = (eye_x + x_off + EYE_WIDTH, EYE_Y_POS + y_off + EYE_HEIGHT), (eye_x + x_off, EYE_Y_POS + y_off + EYE_HEIGHT)
+        if i == 0:  # Left Eye
+            p1, p2 = (eye_x + x_off, EYE_Y_POS + y_off), (eye_x +
+                                                          x_off + EYE_WIDTH, EYE_Y_POS + y_off + slant)
+            p3, p4 = (eye_x + x_off + EYE_WIDTH, EYE_Y_POS + y_off +
+                      EYE_HEIGHT), (eye_x + x_off, EYE_Y_POS + y_off + EYE_HEIGHT)
+        else:  # Right Eye
+            p1, p2 = (eye_x + x_off, EYE_Y_POS + y_off +
+                      slant), (eye_x + x_off + EYE_WIDTH, EYE_Y_POS + y_off)
+            p3, p4 = (eye_x + x_off + EYE_WIDTH, EYE_Y_POS + y_off +
+                      EYE_HEIGHT), (eye_x + x_off, EYE_Y_POS + y_off + EYE_HEIGHT)
         pygame.draw.polygon(screen, ANGRY_COLOR, [p1, p2, p3, p4])
 
     mouth_points = generate_angry_mouth_points(progress, offset=shake_offset)
     if mouth_points:
         pygame.draw.lines(screen, ANGRY_COLOR, False, mouth_points, 12)
+
 
 def draw_sad_emotion(current_time, start_time, progress):
     """Draws the sad face with a downward gaze, droopy lids, and a tear."""
@@ -277,37 +325,50 @@ def draw_sad_emotion(current_time, start_time, progress):
     gaze_x = cfg["gaze_x_amp"] * progress
     gaze_y = cfg["gaze_y_amp"] * progress
     gaze_offset = (gaze_x, gaze_y)
-    
-    droop_height = (EYE_HEIGHT / cfg["droop_factor"]) * math.sin(math.pi / 2 * progress)
+
+    droop_height = (EYE_HEIGHT / cfg["droop_factor"]
+                    ) * math.sin(math.pi / 2 * progress)
 
     for dx in [-EYE_SPACING, EYE_SPACING]:
         eye_x = WIDTH // 2 + dx - EYE_WIDTH // 2
-        draw_rounded_eye(screen, eye_x, EYE_Y_POS, EYE_WIDTH, EYE_HEIGHT, EYE_CORNER_RADIUS, offset=gaze_offset)
-        lid_rect = pygame.Rect(eye_x + gaze_offset[0], EYE_Y_POS + gaze_offset[1], EYE_WIDTH, droop_height)
-        pygame.draw.rect(screen, LID_COLOR, lid_rect, border_top_left_radius=EYE_CORNER_RADIUS, border_top_right_radius=EYE_CORNER_RADIUS)
+        draw_rounded_eye(screen, eye_x, EYE_Y_POS, EYE_WIDTH,
+                         EYE_HEIGHT, EYE_CORNER_RADIUS, offset=gaze_offset)
+        lid_rect = pygame.Rect(
+            eye_x + gaze_offset[0], EYE_Y_POS + gaze_offset[1], EYE_WIDTH, droop_height)
+        pygame.draw.rect(screen, LID_COLOR, lid_rect, border_top_left_radius=EYE_CORNER_RADIUS,
+                         border_top_right_radius=EYE_CORNER_RADIUS)
 
-    mouth_float_offset = math.sin(current_time * cfg["mouth_float_speed"]) * cfg["mouth_float_amp"] * progress
+    mouth_float_offset = math.sin(
+        current_time * cfg["mouth_float_speed"]) * cfg["mouth_float_amp"] * progress
     frown_x, frown_y = WIDTH // 2, EYE_Y_POS + EYE_HEIGHT + 90
-    draw_frown(screen, frown_x, frown_y + mouth_float_offset, 100, 50, progress, EYE_COLOR, offset=gaze_offset)
-    
+    draw_frown(screen, frown_x, frown_y + mouth_float_offset,
+               100, 50, progress, EYE_COLOR, offset=gaze_offset)
+
     tear_x = WIDTH // 2 - EYE_SPACING
     tear_y = EYE_Y_POS + EYE_HEIGHT + gaze_offset[1]
-    draw_tear(screen, tear_x, tear_y, cfg["tear_size"], progress, offset=(gaze_offset[0], 0))
+    draw_tear(screen, tear_x, tear_y,
+              cfg["tear_size"], progress, offset=(gaze_offset[0], 0))
+
 
 def draw_pamper_emotion(current_time, start_time, progress):
     """Draws the pamper face with glowing eyes, blush, and a happy mouth."""
     cfg = PAMPER_CONFIG
     time_elapsed = current_time - start_time
-    
+
     for i, dx in enumerate([-EYE_SPACING, EYE_SPACING]):
         eye_x = WIDTH // 2 + dx - EYE_WIDTH // 2
-        
-        glow_scale = 1 + cfg["glow_amp"] * math.sin(time_elapsed * cfg["glow_speed"])
-        bounce_offset = cfg["bounce_amp"] * math.sin(time_elapsed * cfg["bounce_speed"])
-        stretch = 1 + cfg["stretch_amp"] * math.sin(time_elapsed * cfg["stretch_speed"])
-        
-        new_width, new_height = int(EYE_WIDTH * glow_scale), int(EYE_HEIGHT * stretch)
-        eye_rect = pygame.Rect(eye_x - (new_width - EYE_WIDTH)//2, EYE_Y_POS + bounce_offset, new_width, new_height)
+
+        glow_scale = 1 + cfg["glow_amp"] * \
+            math.sin(time_elapsed * cfg["glow_speed"])
+        bounce_offset = cfg["bounce_amp"] * \
+            math.sin(time_elapsed * cfg["bounce_speed"])
+        stretch = 1 + cfg["stretch_amp"] * \
+            math.sin(time_elapsed * cfg["stretch_speed"])
+
+        new_width, new_height = int(
+            EYE_WIDTH * glow_scale), int(EYE_HEIGHT * stretch)
+        eye_rect = pygame.Rect(eye_x - (new_width - EYE_WIDTH) //
+                               2, EYE_Y_POS + bounce_offset, new_width, new_height)
         glow_color = (min(255, int(EYE_COLOR[0] * glow_scale)),
                       min(255, int(EYE_COLOR[1] * glow_scale)),
                       min(255, int(EYE_COLOR[2] * glow_scale)))
@@ -316,11 +377,12 @@ def draw_pamper_emotion(current_time, start_time, progress):
         blush_x = eye_x + (EYE_WIDTH // 2) - 40
         blush_y = EYE_Y_POS + EYE_HEIGHT + 10
         draw_blush(screen, blush_x, blush_y, 80, 40)
-    
+
     mouth_x, mouth_y = WIDTH // 2, EYE_Y_POS + EYE_HEIGHT + 70
     smile_offset = 7 * math.sin(time_elapsed * 4)
     arc_rect = pygame.Rect(mouth_x - 120//2, mouth_y + smile_offset, 120, 60)
     pygame.draw.arc(screen, PAMPER_COLOR, arc_rect, math.pi, math.pi * 2, 5)
+
 
 # --- Main Game Loop ---
 running = True
@@ -338,8 +400,8 @@ while running:
             emotion_start_time = time.time()
             emotion_anim_progress = 0
         elif command in ["nodding", "neutral"]:
-            current_emotion = "neutral" # These use the neutral draw function
-    
+            current_emotion = "neutral"  # These use the neutral draw function
+
     except BlockingIOError:
         # This is normal and expected, means no message has arrived
         pass
@@ -352,12 +414,13 @@ while running:
         if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
             running = False
         if event.type == pygame.KEYDOWN:
-            key_map = {'h': "happy", 'a': "angry", 's': "sad", 'p': "pamper", 'g': "greet"}
+            key_map = {'h': "happy", 'a': "angry",
+                       's': "sad", 'p': "pamper", 'g': "greet"}
             key_name = pygame.key.name(event.key)
             if key_name in key_map:
                 emotion = key_map[key_name]
                 current_emotion = emotion if current_emotion != emotion else "neutral"
-                is_nodding = False # Keyboard overrides nodding
+                is_nodding = False  # Keyboard overrides nodding
                 emotion_start_time = time.time()
                 emotion_anim_progress = 0
 
@@ -380,14 +443,15 @@ while running:
             mode, mode_start_time = random.choice([1, 2]), time.time()
             mode_duration = 3 + random.uniform(0.5, 1.5) if mode == 2 else 0
             next_mode_time = time.time() + random.uniform(10, 15)
-        
+
         if mode == 2 and now - mode_start_time > mode_duration:
             mode = 1
 
         # Eye movement logic
         if not moving and now - last_change_time >= rest_duration:
             current_index = (current_index + 1) % len(movement_order)
-            start_position, target_position = current_position, positions[movement_order[current_index]]
+            start_position, target_position = current_position, positions[
+                movement_order[current_index]]
             moving, move_start_time = True, now
         if moving:
             elapsed_time = now - move_start_time
@@ -397,8 +461,9 @@ while running:
             else:
                 t = elapsed_time / move_duration
                 smoothed_t = t * t * (3 - 2 * t)
-                current_position = start_position + (target_position - start_position) * smoothed_t
-        
+                current_position = start_position + \
+                    (target_position - start_position) * smoothed_t
+
         # Blinking logic
         if not blinking and now - blink_start_time > blink_interval:
             blinking, lid_progress, lid_direction, blink_start_time = True, 0, 1, now
@@ -422,11 +487,11 @@ while running:
         draw_sad_emotion(now, emotion_start_time, emotion_anim_progress)
     elif current_emotion == "pamper":
         draw_pamper_emotion(now, emotion_start_time, emotion_anim_progress)
-    else: # This handles both "neutral" and "nodding"
+    else:  # This handles both "neutral" and "nodding"
         draw_neutral_emotion()
 
     pygame.display.flip()
 
 # --- Quit ---
-server_socket.close() # MODIFICATION: Close the socket
+server_socket.close()  # MODIFICATION: Close the socket
 pygame.quit()
