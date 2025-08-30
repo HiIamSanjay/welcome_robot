@@ -12,35 +12,34 @@ import requests
 import socket
 from enum import Enum
 import io
+import os
+import face_recognition
+import numpy as np
+from deepface import DeepFace
 
 # --- Configuration Constants ---
-GEMINI_API_KEY = "AIzaSyDv1KDhOOfv7lH3MT-hJJ8r2SD9oZ4_NXY"
+# User's API key is included
+GEMINI_API_KEY = "AIzaSyDJ5t4I5WNWTM3cDHU99TIu-audB574xzY" 
 
-# --- Toc H Themed Constants ---
+# --- UI and State Colors ---
+STATE_COLORS = {
+    "IDLE": (100, 100, 100),      # Dark Gray
+    "LISTENING": (0, 255, 0),     # Green
+    "THINKING": (255, 191, 0),    # Amber/Yellow
+    "SPEAKING": (0, 120, 255)     # Blue
+}
 BG_COLOR = "#0A2239"
 TEXT_COLOR = "#FFFFFF"
 ACCENT_COLOR = "#005a9e"
 FONT_FACE = "Segoe UI"
-FOLLOW_UP_TIMEOUT = 20
 TIST_WEBSITE_URL = "https://tistcochin.edu.in/"
 TIST_LOGO_URL = "https://tistcochin.edu.in/wp-content/uploads/2022/08/TISTlog-trans.png"
-FACE_DETECTION_COOLDOWN = 30
-# ### MODIFICATION START: Speech Recognition Settings ###
-# The maximum duration for a single spoken phrase (in seconds)
 PHRASE_TIME_LIMIT = 15 
-# The amount of silence to wait for before considering a phrase complete (in seconds)
-PAUSE_THRESHOLD = 2.0 
-# ### MODIFICATION END ###
-
+PAUSE_THRESHOLD = 1.5
 
 # --- IPC Configuration ---
 EYE_ANIMATION_HOST = '127.0.0.1'
 EYE_ANIMATION_PORT = 12345
-
-# --- Keyword Lists for Direct Control ---
-ANGER_KEYWORDS = ["angry", "furious", "irritated", "annoyed", "frustrated", "hate"]
-SAD_KEYWORDS = ["sad", "sadness", "unhappy", "depressed", "sorry", "unfortunately"]
-PAMPER_KEYWORDS = ["pamper", "pampered", "cute", "adorable", "sweet", "cuddle"]
 
 # --- AI Model Constants ---
 GEMINI_MODEL = "gemini-2.5-flash" 
@@ -66,7 +65,7 @@ COLLEGE_CONTEXT = """
 - **MBA**: A Master of Business Administration program is offered by the Toc H School of Management.
 
 ## Admission Process
-- **B.Tech Admissions**: 50% of seats are filled by the Government of Kerala based on the rank in the Kerala Engineering Architecture Medical (KEAM) entrance exam. The remaining 50% are Management Quota seats, filled based on merit and specific criteria set by the college.
+- **B.Tech Admissions**: Half of the seats are filled by the Government of Kerala based on the rank in the Kerala Engineering Architecture Medical (KEAM) entrance exam. The remaining 50% are Management Quota seats, filled based on merit and specific criteria set by the college.
 - **M.Tech Admissions**: Based on GATE scores or university entrance exams.
 - **MBA Admissions**: Requires a valid score in KMAT, CMAT, or CAT, followed by a Group Discussion and Personal Interview.
 
@@ -114,14 +113,13 @@ I'm sorry to hear that. Unfortunately, I was unable to find the specific details
 sad
 """
 
-# --- State Machine ---
+
+# --- NEW: State Machine (Simplified for smoother flow) ---
 class AppState(Enum):
     IDLE = 1
-    FACE_DETECTED = 2
-    PROCESSING_AI = 3
+    LISTENING = 2
+    THINKING = 3
     SPEAKING = 4
-    LISTENING_FOR_FOLLOW_UP = 5
-    COOLDOWN = 6
 
 class AIAssistantApp:
  
@@ -130,62 +128,53 @@ class AIAssistantApp:
         self.text_input_visible = False
         self.cap = None
         self.state = AppState.IDLE
-        self.state_timer = 0
+        self.last_face_seen_time = 0
         self.last_query = ""
         self._log("-----------------------------------------")
         self._log("🤖 AI Assistant application starting up...")
-        if not GEMINI_API_KEY or "YOUR_API_KEY" in GEMINI_API_KEY:
-            self._log("❌ FATAL: Gemini API key not found.")
-            messagebox.showerror("API Key Error", "Please paste your Gemini API key into the script.")
-            root.destroy()
-            return
+        
         genai.configure(api_key=GEMINI_API_KEY)
 
-        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        
         self.recognizer = sr.Recognizer()
         self.recognizer.pause_threshold = PAUSE_THRESHOLD
-        self._log(f"🎙️ Speech recognizer pause threshold set to {PAUSE_THRESHOLD} seconds.")
-
+        
         self.gemini_model = genai.GenerativeModel(model_name=GEMINI_MODEL)
         
-        # ### MODIFICATION START: Set a Custom Voice ###
         self.tts_engine = pyttsx3.init()
         
-        # --- Voice Selection Logic ---
-        # ❗ PASTE THE VOICE ID YOU CHOSE FROM THE TEST SCRIPT HERE
-        # It will look something like 'english-us' or 'mb-us1'
-        # If you can't find a good one, leave it as None to use the default.
-        desired_voice_id = "cmu_us_kal_arctic_hts" # Example: "english-mb-mbrola-1" 
-
-        if desired_voice_id:
-            try:
-                self.tts_engine.setProperty('voice', desired_voice_id)
-                self._log(f"🔊 Custom TTS voice set to: {desired_voice_id}")
-            except Exception as e:
-                self._log(f"⚠️ Could not set custom voice '{desired_voice_id}'. Using default. Error: {e}")
-        # ### MODIFICATION END ###
+        self._log("Loading known faces...")
+        self.known_face_encodings = []
+        self.known_face_names = []
+        KNOWN_FACES_DIR = "known_faces"
+        if os.path.exists(KNOWN_FACES_DIR):
+            for name in os.listdir(KNOWN_FACES_DIR):
+                person_dir = os.path.join(KNOWN_FACES_DIR, name)
+                if os.path.isdir(person_dir):
+                    for filename in os.listdir(person_dir):
+                        try:
+                            image_path = os.path.join(person_dir, filename)
+                            image = face_recognition.load_image_file(image_path)
+                            face_encodings = face_recognition.face_encodings(image)
+                            if face_encodings:
+                                self.known_face_encodings.append(face_encodings[0])
+                                self.known_face_names.append(name)
+                        except Exception as e:
+                            self._log(f"⚠️ Warning: Could not process image {filename}. Error: {e}")
+        self._log(f"Loaded {len(self.known_face_names)} known faces.")
 
         self.setup_ui()
         self._log("🖥️ UI setup complete.")
+        
         threading.Thread(target=self.load_logo_from_url, daemon=True).start()
         threading.Thread(target=self.background_voice_listener, daemon=True).start()
-        self.update_state_machine()
+        
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.update_state_machine()
 
     def _log(self, message):
         print(f"[{time.strftime('%H:%M:%S')}] {message}")
 
-    def _send_eye_command(self, command):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                s.sendto(command.encode('utf-8'), (EYE_ANIMATION_HOST, EYE_ANIMATION_PORT))
-                self._log(f"👁️ Sent eye command: '{command}'")
-        except Exception as e:
-            self._log(f"❌ Could not send command to eye animation: {e}")
-
     def setup_ui(self):
-        # ... (this function remains the same) ...
         self.root.title("TIST AI Assistant")
         self.root.configure(bg=BG_COLOR)
         content_frame = ttk.Frame(self.root, style="TFrame")
@@ -222,8 +211,136 @@ class AIAssistantApp:
         web_btn = ttk.Button(button_bar_frame, text="Visit Website 🌐", command=self.open_website)
         web_btn.grid(row=0, column=2, sticky="ew", padx=5)
 
+    def update_video_frame(self):
+        if not self.cap or not self.cap.isOpened():
+            self.cap = cv2.VideoCapture(0)
+            if not self.cap.isOpened():
+                self._log("❌ Cannot access webcam")
+                return
+
+        ret, frame = self.cap.read()
+        if not ret:
+            return
+
+        # Resize frame for faster processing
+        small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
+        rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+
+        # Find all faces in the current frame
+        face_locations = face_recognition.face_locations(rgb_small_frame)
+        face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
+
+        if face_locations:
+            self.last_face_seen_time = time.time()
+            if self.state == AppState.IDLE:
+                self.state = AppState.LISTENING
+
+        # Use zip to prevent crashes from mismatched lists
+        for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
+
+            # CORRECTED RECOGNITION LOGIC
+            matches = face_recognition.compare_faces(self.known_face_encodings, face_encoding)
+            name = "Person"
+
+            face_distances = face_recognition.face_distance(self.known_face_encodings, face_encoding)
+            if len(face_distances) > 0:
+                best_match_index = np.argmin(face_distances)
+                if matches[best_match_index]:
+                    name = self.known_face_names[best_match_index]
+
+            # EMOTION DETECTION
+            emotion = "..."
+            try:
+                face_roi = rgb_small_frame[top:bottom, left:right]
+                analysis = DeepFace.analyze(face_roi, actions=['emotion'], enforce_detection=False)
+                emotion = analysis[0]['dominant_emotion']
+            except:
+                emotion = "N/A"
+
+            # CORRECTED LABEL DRAWING
+            label = f"{name} ({emotion})"
+
+            # Scale coordinates back up and draw the results
+            top, right, bottom, left = top*2, right*2, bottom*2, left*2
+            cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+            cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 255, 0), cv2.FILLED)
+            font = cv2.FONT_HERSHEY_DUPLEX
+            cv2.putText(frame, label, (left + 6, bottom - 6), font, 0.8, (255, 255, 255), 1)
+
+        # Display the final frame
+        border_color = STATE_COLORS.get(self.state.name, (0,0,0))
+        bordered_frame = cv2.copyMakeBorder(frame, 10, 10, 10, 10, cv2.BORDER_CONSTANT, value=border_color)
+
+        rgb_display = cv2.cvtColor(bordered_frame, cv2.COLOR_BGR2RGB)
+        imgtk = ImageTk.PhotoImage(image=Image.fromarray(rgb_display))
+        self.video_label.imgtk = imgtk
+        self.video_label.config(image=imgtk)
+
+    def background_voice_listener(self):
+        mic = sr.Microphone()
+        with mic as source:
+            self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+
+        while True:
+            if self.state == AppState.LISTENING:
+                try:
+                    with mic as source:
+                        audio = self.recognizer.listen(source, phrase_time_limit=10)
+                    self.last_query = self.recognizer.recognize_google(audio)
+                    self.root.after(0, self.process_ai_query)
+                except:
+                    pass
+            time.sleep(0.1)
+
+    def process_ai_query(self):
+        if self.state != AppState.LISTENING: return
+        self.state = AppState.THINKING
+        self.spoken_text_label.config(text=f"You: {self.last_query}")
+        self.response_label.config(text="Thinking...")
+        threading.Thread(target=self._run_gemini_and_speak, daemon=True).start()
+
+    def _run_gemini_and_speak(self):
+        try:
+            full_prompt = f"{GEMINI_PROMPT}\n\n{COLLEGE_CONTEXT}\n\nUser Query: \"{self.last_query}\""
+            response = self.gemini_model.generate_content(full_prompt)
+            clean_text = response.text.strip()
+            
+            self.root.after(0, lambda: self.response_label.config(text=clean_text))
+            self.state = AppState.SPEAKING
+            self.speak_response(clean_text)
+        except Exception as e:
+            self._log(f"❌ Gemini Error: {e}")
+            self.root.after(0, lambda: self.response_label.config(text="Sorry, an error occurred."))
+            self.state = AppState.LISTENING
+
+    def speak_response(self, text):
+        try:
+            self.tts_engine.say(text)
+            self.tts_engine.runAndWait()
+        finally:
+            self.state = AppState.LISTENING
+            
+    def update_state_machine(self):
+        now = time.time()
+        
+        if self.state != AppState.IDLE and (now - self.last_face_seen_time > 5):
+            self.state = AppState.IDLE
+
+        status_text = {
+            AppState.IDLE: "Waiting for a face...",
+            AppState.LISTENING: "Listening...",
+        }.get(self.state, self.spoken_text_label.cget("text"))
+        
+        self.spoken_text_label.config(text=status_text)
+            
+        self.update_video_frame()
+        self.root.after(100, self.update_state_machine)
+        
+    def on_start_voice_input(self):
+        if self.state == AppState.IDLE:
+            self.state = AppState.LISTENING
+
     def toggle_text_input(self):
-        # ... (this function remains the same) ...
         if self.text_input_visible:
             self.text_input_frame.pack_forget()
             self.text_input_visible = False
@@ -233,187 +350,39 @@ class AIAssistantApp:
             self.text_input_visible = True
 
     def on_submit_text(self):
-        # ... (this function remains the same) ...
-        if self.state not in [AppState.IDLE, AppState.COOLDOWN]:
-            messagebox.showinfo("Busy", "The assistant is currently busy. Please wait.")
+        if self.state in [AppState.THINKING, AppState.SPEAKING]:
+            messagebox.showinfo("Busy", "The assistant is currently busy.")
             return
         user_input = self.input_box.get().strip()
         if user_input:
             self.input_box.delete(0, tk.END)
             if self.text_input_visible:
                 self.toggle_text_input()
-            self._log(f"⌨️ Text input received: '{user_input}'")
             self.last_query = user_input
             self.process_ai_query()
-        else:
-            messagebox.showwarning("Input Missing", "Please enter a question.")
-    
-    def on_start_voice_input(self):
-        # ... (this function remains the same) ...
-        if self.state == AppState.IDLE or self.state == AppState.COOLDOWN:
-            self._log("🎤 Voice button pressed. Listening for query...")
-            self.spoken_text_label.config(text="Listening...")
-            self.state = AppState.FACE_DETECTED
-            self.state_timer = time.time()
-            self._send_eye_command("happy")
-        else:
-            messagebox.showinfo("Busy", "The assistant is currently busy. Please wait.")
-
-    def background_voice_listener(self):
-        """A dedicated thread that listens for audio and processes it based on the current app state."""
-        self._log("👂 Background voice listener started.")
-        mic = sr.Microphone()
-        with mic as source:
-            self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
-
-        while True:
-            if self.state == AppState.FACE_DETECTED or self.state == AppState.LISTENING_FOR_FOLLOW_UP:
-                self._log("🎤 Listening for speech...")
-                try:
-                    with mic as source:
-                        # ### MODIFICATION START: Using the new time limit constant ###
-                        audio = self.recognizer.listen(source, phrase_time_limit=PHRASE_TIME_LIMIT)
-                        # ### MODIFICATION END ###
-                    self._log("🎤 Audio captured, recognizing...")
-                    text = self.recognizer.recognize_google(audio)
-                    self._log(f"🎤 Recognition successful: '{text}'")
-                    self.last_query = text
-                    self.root.after(0, self.process_ai_query)
-                except sr.UnknownValueError:
-                    self._log("🎤 Recognition failed: Could not understand audio.")
-                except Exception as e:
-                    self._log(f"🎤 Listener error: {e}")
-            
-            time.sleep(0.1)
-
-    def process_ai_query(self):
-        """Handles the AI interaction using the hybrid logic."""
-        # ... (this function remains the same) ...
-        self.state = AppState.PROCESSING_AI
-        self.spoken_text_label.config(text=f"You: {self.last_query}")
-        self.response_label.config(text="Thinking...")
-        self._send_eye_command("nodding")
-        try:
-            user_query_lower = self.last_query.lower()
-            forced_emotion = None
-            if any(word in user_query_lower for word in ANGER_KEYWORDS):
-                forced_emotion = "angry"
-            elif any(word in user_query_lower for word in SAD_KEYWORDS):
-                forced_emotion = "sad"
-            elif any(word in user_query_lower for word in PAMPER_KEYWORDS):
-                forced_emotion = "pamper"
-            self._log("🧠 Querying Gemini model...")
-            full_prompt = f"{GEMINI_PROMPT}\n\nUser Query: \"{self.last_query}\""
-            response = self.gemini_model.generate_content(full_prompt)
-            raw_text = response.text
-            parts = raw_text.strip().split('\n')
-            clean_text = parts[0].strip()
-            emotion = "neutral"
-            if forced_emotion:
-                emotion = forced_emotion
-                self._log(f"🔑 Keyword override! Forcing emotion to: '{emotion}'")
-            elif len(parts) > 1:
-                last_part = parts[-1].strip().lower()
-                if last_part in ["happy", "sad", "angry", "pamper", "neutral"]:
-                    emotion = last_part
-                    self._log(f"🧠 AI classified its emotion as: '{emotion}'")
-                else:
-                    clean_text = "\n".join(parts).strip()
-            self._log(f"🤖 AI says: {clean_text}")
-            self.response_label.config(text=clean_text)
-            self._send_eye_command(emotion)
-            self.state = AppState.SPEAKING
-            threading.Thread(target=self.speak_response, args=(clean_text,), daemon=True).start()
-        except Exception as e:
-            self._log(f"❌ Gemini Error: {e}")
-            self.response_label.config(text="Sorry, an error occurred.")
-            self.state = AppState.COOLDOWN
-            self.state_timer = time.time()
-
-    def speak_response(self, text):
-        # ... (this function remains the same) ...
-        self._log("🔊 TTS thread started.")
-        try:
-            self.tts_engine.say(text)
-            self.tts_engine.runAndWait()
-        finally:
-            self._log("🔊 TTS finished. Switching to follow-up state.")
-            self.state = AppState.LISTENING_FOR_FOLLOW_UP
-            self.state_timer = time.time()
-
-    def update_state_machine(self):
-        # ... (this function remains the same) ...
-        now = time.time()
-        if self.state == AppState.IDLE:
-            pass
-        elif self.state == AppState.FACE_DETECTED:
-            if now - self.state_timer > 5:
-                self._log("🎤 Timed out waiting for initial query.")
-                self.state = AppState.COOLDOWN
-                self.state_timer = time.time()
-                self._send_eye_command("neutral")
-        elif self.state == AppState.LISTENING_FOR_FOLLOW_UP:
-            if now - self.state_timer > FOLLOW_UP_TIMEOUT:
-                self._log(f"🏁 Follow-up timed out after {FOLLOW_UP_TIMEOUT}s.")
-                self.state = AppState.COOLDOWN
-                self.state_timer = time.time()
-                self._send_eye_command("neutral")
-        elif self.state == AppState.COOLDOWN:
-            self.spoken_text_label.config(text="Waiting for interaction...")
-            if now - self.state_timer > FACE_DETECTION_COOLDOWN:
-                self._log("⏱️ Cooldown finished. Returning to IDLE state.")
-                self.state = AppState.IDLE
-        self.update_video_frame()
-        self.root.after(100, self.update_state_machine)
-        
-    def update_video_frame(self):
-        # ... (this function remains the same) ...
-        if not self.cap or not self.cap.isOpened():
-            self.cap = cv2.VideoCapture(2)
-            if not self.cap.isOpened():
-                self._log("❌ Cannot access webcam")
-                return
-        ret, frame = self.cap.read()
-        if ret:
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            faces = self.face_cascade.detectMultiScale(gray, 1.3, 5)
-            if self.state == AppState.IDLE and len(faces) > 0:
-                self._log("🙂 Face detected. Switching to listen for query.")
-                self.state = AppState.FACE_DETECTED
-                self.state_timer = time.time()
-                self.spoken_text_label.config(text="Face detected. Ask a question.")
-                self._send_eye_command("happy")
-            for (x, y, w, h) in faces:
-                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 90, 158), 3)
-            frame = cv2.resize(frame, (640, 480))
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            imgtk = ImageTk.PhotoImage(image=Image.fromarray(rgb))
-            self.video_label.imgtk = imgtk
-            self.video_label.config(image=imgtk)
 
     def load_logo_from_url(self):
-        # ... (this function remains the same) ...
         try:
             headers = {'User-Agent': 'Mozilla/5.0'}
             response = requests.get(TIST_LOGO_URL, headers=headers, stream=True)
             response.raise_for_status()
-            logo_data = response.content
-            logo_image = Image.open(io.BytesIO(logo_data))
+            logo_image = Image.open(io.BytesIO(response.content))
             logo_image.thumbnail((250, 250))
-            self.logo_photo = ImageTk.PhotoImage(logo_image)
-            self.logo_label.config(image=self.logo_photo)
-        except requests.exceptions.RequestException as e:
+            self.root.after(0, self.update_logo, logo_image)
+        except Exception as e:
             self._log(f"❌ Could not download logo: {e}")
-            self.logo_label.config(text="TIST", font=(FONT_FACE, 20, "bold"))
+            
+    def update_logo(self, logo_image):
+        self.logo_photo = ImageTk.PhotoImage(logo_image)
+        self.logo_label.config(image=self.logo_photo)
 
     def open_website(self):
-        # ... (this function remains the same) ...
         webbrowser.open_new_tab(TIST_WEBSITE_URL)
 
     def on_closing(self):
-        # ... (this function remains the same) ...
         self._log("🛑 Close button clicked. Shutting down.")
-        if self.cap: self.cap.release()
+        if self.cap:
+            self.cap.release()
         self.root.destroy()
 
 if __name__ == "__main__":
