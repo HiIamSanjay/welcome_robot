@@ -33,7 +33,7 @@ def suppress_alsa_errors():
         pass
 
 # --- Configuration Constants ---
-GEMINI_API_KEY = "AIzaSyAh26HcQ76_kc4Spy8XjXJskwSCMNiFsu0"
+GEMINI_API_KEY = ""
 
 # --- Hardware Configuration ---
 MICROPHONE_INDEX = 1
@@ -68,7 +68,7 @@ MIRROR_KEYWORDS = ["mirror my emotion", "copy me", "mirror me"]
 STOP_MIRROR_KEYWORDS = ["stop mirroring", "stop copying", "that's enough"]
 
 # --- AI Model Constants ---
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 COLLEGE_CONTEXT = """
 # Toc H Institute of Science and Technology (TIST) - Detailed Information
 ## Overview
