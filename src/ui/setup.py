@@ -24,9 +24,9 @@ setup(
     entry_points={
         'console_scripts': [
             'main_gui = ui.main_gui_node:main',
-            'eye_animation = ui.eye_animation_node:main'
+            'eye_animation = ui.eye_animation_node:main',
+            'interaction_manager = ui.interaction_manager_node:main'
         ],
     },
 )
-
 

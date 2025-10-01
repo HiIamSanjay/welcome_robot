@@ -22,7 +22,7 @@ def generate_launch_description():
             name='speech_to_text_node',
             output='screen',
             respawn=True,
-            respawn_delay=2.0,
+            respawn_delay=1.0,
         ),
     ])
 

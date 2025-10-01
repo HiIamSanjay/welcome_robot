@@ -4,11 +4,8 @@ import os
 
 def generate_launch_description():
     """
-    Launches the main GUI on the primary monitor and the eye animation
-    on the secondary monitor by explicitly setting window positions.
+    Launches the main GUI, eye animation, and the new interaction manager.
     """
-    # The main_gui_node will position itself using Tkinter's geometry method.
-    # It will inherit the default DISPLAY environment variable.
     main_gui_node = Node(
         package='ui',
         executable='main_gui',
@@ -20,9 +17,6 @@ def generate_launch_description():
         parameters=[{'use_sim_time': False}],
     )
 
-    # For the eye_animation_node, we set an environment variable BEFORE it starts.
-    # This tells the underlying SDL library where to create the window.
-    # The coordinates 1920,557 come from your 'xrandr' output for HDMI-1-0.
     eye_animation_node = Node(
         package='ui',
         executable='eye_animation',
@@ -35,9 +29,19 @@ def generate_launch_description():
         prefix="env SDL_VIDEO_WINDOW_POS=1920,557"
     )
 
+    # --- ADDED INTERACTION MANAGER ---
+    # This new node will manage the overall interaction flow.
+    interaction_manager_node = Node(
+        package='ui', # Assuming the new node is in your 'ui' package
+        executable='interaction_manager', # This must match your script's executable name
+        name='interaction_manager_node',
+        output='screen',
+        respawn=True,
+        respawn_delay=2.0,
+    )
+
     return LaunchDescription([
         main_gui_node,
         eye_animation_node,
+        interaction_manager_node, # Add the new node to the launch list
     ])
-
-
