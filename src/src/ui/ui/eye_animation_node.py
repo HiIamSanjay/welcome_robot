@@ -6,15 +6,20 @@ import time
 import random
 import numpy as np
 import math
-import os
 
 # --- Pygame Initialization ---
-# The window position is now set in the launch file for better control.
 pygame.init()
 
-# --- MODIFICATION: Hardcode the target display's resolution ---
-# Your xrandr output shows HDMI-1-0 is 1280x720.
-WIDTH, HEIGHT = 1280, 720
+# Use os.environ to set the window position before pygame.display.set_mode is called
+import os
+os.environ['SDL_VIDEO_WINDOW_POS'] = '1920,557'
+
+# --- Display Configuration ---
+# Since we are positioning with SDL, get screen size from a temporary unpositioned window
+# This is a bit of a workaround but is robust.
+pygame.display.set_mode((1,1), pygame.NOFRAME) 
+info = pygame.display.Info()
+WIDTH, HEIGHT = 1280, 720 # Set fixed size based on HDMI display
 
 # --- Configuration ---
 # Colors
@@ -22,11 +27,13 @@ EYE_COLOR = (0, 136, 255); HAPPY_COLOR = (0, 136, 255); GREET_COLOR = (0, 255, 0
 LID_COLOR = (0, 0, 0); BG_COLOR = (0, 0, 0); SMILE_COLOR = HAPPY_COLOR
 ANGRY_COLOR = (255, 0, 0); PAMPER_COLOR = (255, 100, 100); TEAR_COLOR = (173, 216, 230)
 SURPRISE_COLOR = (255, 255, 0); FEAR_COLOR = (180, 150, 255)
+# --- KEY CHANGE: Added color for the new speaking animation ---
+SPEAKING_COLOR = (200, 220, 255)
 
-# Eye Parameters - Centered for 1280x720 resolution
+
+# Eye Parameters
 EYE_WIDTH, EYE_HEIGHT = 180, 180; EYE_CORNER_RADIUS = 45
-EYE_Y_POS = HEIGHT // 2 - EYE_HEIGHT // 2 - 100
-EYE_SPACING = 300
+EYE_Y_POS = HEIGHT // 2 - EYE_HEIGHT // 2 - 100; EYE_SPACING = 300
 
 # Animation Timings
 EMOTION_ANIM_DURATION = 0.3; BLINK_DURATION = 0.1
@@ -37,9 +44,15 @@ SAD_CONFIG = {"gaze_x_amp": -20, "gaze_y_amp": 30, "droop_factor": 1.5, "mouth_f
 FEAR_CONFIG = {"wobble_speed": 15, "wobble_amp": 5, "pupil_scale": 0.8}
 SURPRISE_CONFIG = {"scale_amp": 1.3, "mouth_size": 80}
 PAMPER_CONFIG = {"glow_speed": 4, "glow_amp": 0.1, "bounce_speed": 3, "bounce_amp": 6, "stretch_speed": 6, "stretch_amp": 0.05}
+# --- KEY CHANGE: Added config for the speaking animation ---
+SPEAKING_CONFIG = {"pulse_speed": 8, "pulse_amp": 5, "eye_radius": 70, "mouth_radius": 50, "line_thickness": 8}
 
 
 class EyeAnimationNode(Node):
+    """
+    Controls a full suite of robot eye animations based on ROS topics.
+    Can also be controlled via keyboard for debugging.
+    """
     def __init__(self, screen):
         super().__init__('eye_animation_node')
         self.screen = screen
@@ -63,7 +76,7 @@ class EyeAnimationNode(Node):
         self.lid_progress = 0; self.emotion_anim_progress = 0
         self.blink_start_time = time.time(); self.blink_interval = random.uniform(3, 6)
         
-        self.get_logger().info("Eye Animation node configured for 1280x720 display.")
+        self.get_logger().info(f"Eye Animation node configured for {WIDTH}x{HEIGHT} display.")
 
     # --- ROS Callback Functions ---
     def person_callback(self, msg):
@@ -71,11 +84,18 @@ class EyeAnimationNode(Node):
             self.set_emotion("greet")
         self.is_person_present = msg.data
 
+    # --- KEY CHANGE: Logic updated to handle speaking/listening states ---
     def state_callback(self, msg):
         self.robot_state = msg.data
         if self.robot_state == "speaking":
-            self.is_nodding = True
+            self.is_nodding = False
+            # Only set the speaking emotion if not mirroring another emotion
             if not self.is_mirroring:
+                self.set_emotion("speaking")
+        elif self.robot_state == "listening":
+            self.is_nodding = True
+            # If the previous state was speaking, go back to neutral to show nodding
+            if self.current_emotion == "speaking":
                 self.set_emotion("neutral")
         else:
             self.is_nodding = False
@@ -99,9 +119,10 @@ class EyeAnimationNode(Node):
             self.emotion_start_time = time.time()
             self.emotion_anim_progress = 0
             if new_emotion != "neutral":
+                # Nodding only happens in neutral, so disable it for other emotions
                 self.is_nodding = False
 
-    # --- Drawing Logic (Adjusted for 1280x720) ---
+    # --- Drawing Logic ---
     def draw_rounded_eye(self, x, y, width, height, radius, color, offset=(0, 0)):
         pygame.draw.rect(self.screen, color, (x + offset[0], y + offset[1], width, height), border_radius=radius)
 
@@ -224,10 +245,30 @@ class EyeAnimationNode(Node):
         arc_rect = pygame.Rect(mouth_x - 120//2, mouth_y + smile_offset, 120, 60)
         pygame.draw.arc(self.screen, PAMPER_COLOR, arc_rect, math.pi, math.pi * 2, 5)
 
+    # --- KEY CHANGE: New drawing function for the speaking state ---
+    def draw_speaking_emotion(self, current_time):
+        cfg = SPEAKING_CONFIG
+        
+        # Draw eyes
+        for dx in [-EYE_SPACING, EYE_SPACING]:
+            eye_center = (WIDTH // 2 + dx, EYE_Y_POS + cfg["eye_radius"])
+            pygame.draw.circle(self.screen, SPEAKING_COLOR, eye_center, cfg["eye_radius"], cfg["line_thickness"])
+            
+        # Draw pulsating mouth
+        pulse = cfg["pulse_amp"] * math.sin(current_time * cfg["pulse_speed"])
+        mouth_radius = cfg["mouth_radius"] + pulse
+        mouth_center = (WIDTH // 2, EYE_Y_POS + EYE_HEIGHT + 70)
+        pygame.draw.circle(self.screen, SPEAKING_COLOR, mouth_center, mouth_radius, cfg["line_thickness"])
+
+
     def draw_neutral_emotion(self):
+        # Nodding is now controlled by self.is_nodding, which is set in state_callback
         y_offset = 20 * math.sin(time.time() * 10) if self.is_nodding else 0
+        
+        # Blinking logic
         if not self.blinking and time.time() - self.blink_start_time > self.blink_interval:
             self.blinking, self.lid_progress, self.lid_direction, self.blink_start_time = True, 0, 1, time.time()
+        
         if self.blinking:
             dt = self.clock.get_time() / 1000.0
             if dt > 0:
@@ -235,35 +276,45 @@ class EyeAnimationNode(Node):
             if self.lid_progress >= 1: self.lid_direction = -1
             elif self.lid_progress <= 0:
                 self.blinking, self.lid_progress, self.blink_interval = False, 0, random.uniform(3, 6)
+                
+        # Draw the eyes with potential nodding offset
         for dx in [-EYE_SPACING, EYE_SPACING]:
             base_x = WIDTH // 2 + dx - EYE_WIDTH // 2
             self.draw_rounded_eye(base_x, EYE_Y_POS + y_offset, EYE_WIDTH, EYE_HEIGHT, EYE_CORNER_RADIUS, color=EYE_COLOR)
             self.draw_lids(base_x, EYE_Y_POS + y_offset, EYE_WIDTH, EYE_HEIGHT, blink_progress=self.lid_progress)
             
     def update_animations(self):
+        """Main drawing loop to select and render the correct emotion."""
         now = time.time()
         dt = self.clock.tick(60) / 1000.0
+        
         self.screen.fill(BG_COLOR)
 
-        if self.current_emotion != "neutral":
+        if self.current_emotion not in ["neutral", "speaking"]:
             self.emotion_anim_progress = min(self.emotion_anim_progress + dt / EMOTION_ANIM_DURATION, 1.0)
         else:
-            self.emotion_anim_progress = 0
+            # For instant transitions like speaking/neutral, progress is not needed
+            self.emotion_anim_progress = 1.0
             
-        emotion_map = {
-            "greet": self.draw_greet_emotion,
-            "happy": lambda p: self.draw_happy_emotion(now, self.emotion_start_time, p),
-            "angry": self.draw_angry_emotion,
-            "sad": lambda p: self.draw_sad_emotion(now, self.emotion_start_time, p),
-            "fear": lambda p: self.draw_fear_emotion(now, p),
-            "surprise": self.draw_surprise_emotion,
-            "pamper": lambda p: self.draw_pamper_emotion(now, self.emotion_start_time, p)
-        }
-
-        if self.current_emotion in emotion_map:
-            emotion_map[self.current_emotion](self.emotion_anim_progress)
-            if self.current_emotion == "greet" and self.emotion_anim_progress >= 1.0 and now - self.emotion_start_time > 2.0:
+        if self.current_emotion == "greet":
+            self.draw_greet_emotion(self.emotion_anim_progress)
+            if self.emotion_anim_progress >= 1.0 and now - self.emotion_start_time > 2.0:
                 self.set_emotion("neutral")
+        elif self.current_emotion == "happy":
+            self.draw_happy_emotion(now, self.emotion_start_time, self.emotion_anim_progress)
+        elif self.current_emotion == "angry":
+            self.draw_angry_emotion(self.emotion_anim_progress)
+        elif self.current_emotion == "sad":
+            self.draw_sad_emotion(now, self.emotion_start_time, self.emotion_anim_progress)
+        elif self.current_emotion == "fear":
+            self.draw_fear_emotion(now, self.emotion_anim_progress)
+        elif self.current_emotion == "surprise":
+            self.draw_surprise_emotion(self.emotion_anim_progress)
+        elif self.current_emotion == "pamper":
+            self.draw_pamper_emotion(now, self.emotion_start_time, self.emotion_anim_progress)
+        # --- KEY CHANGE: Added the new speaking emotion to the render loop ---
+        elif self.current_emotion == "speaking":
+            self.draw_speaking_emotion(now)
         else:
             self.draw_neutral_emotion()
 
@@ -271,19 +322,9 @@ class EyeAnimationNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
+    screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.NOFRAME) # Use NOFRAME for positioning
+    pygame.display.set_caption("ROS 2 Eye Animator")
     
-    try:
-        # --- KEY CHANGE: Use NOFRAME instead of FULLSCREEN ---
-        # This creates a borderless window that is more likely to respect
-        # the position set by the SDL_VIDEO_WINDOW_POS environment variable.
-        screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.NOFRAME)
-        pygame.display.set_caption("ROS 2 Eye Animator")
-        pygame.mouse.set_visible(False)
-    except pygame.error as e:
-        print(f"FATAL: Could not create Pygame screen for eye animation: {e}")
-        rclpy.shutdown()
-        return
-
     eye_node = EyeAnimationNode(screen)
     
     running = True
@@ -291,15 +332,28 @@ def main(args=None):
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 running = False
+            # Add keyboard shortcuts for debugging
             if event.type == pygame.KEYDOWN:
-                key_map = {'h': "happy", 'a': "angry", 's': "sad", 'g': "greet", 'f': "fear", 'w': "surprise", 'p': "pamper", 'n': "neutral"}
+                key_map = {
+                    'h': "happy", 'a': "angry", 's': "sad",
+                    'g': "greet", 'f': "fear", 'w': "surprise",
+                    'p': "pamper", 'n': "neutral",
+                    't': "speaking" # 't' for talk
+                }
                 key_name = pygame.key.name(event.key)
                 if key_name in key_map:
                     emotion = key_map[key_name]
                     eye_node.get_logger().info(f"Keyboard override: setting emotion to '{emotion}'")
-                    if emotion not in ["greet", "neutral"]:
+                    # Manually set mirroring for testing emotions that depend on it
+                    if emotion not in ["greet", "neutral", "speaking"]:
                         eye_node.is_mirroring = True
-                    eye_node.set_emotion(emotion)
+                    # Manually set state for testing listening/speaking animations
+                    if emotion == "speaking":
+                        eye_node.state_callback(String(data="speaking"))
+                    elif emotion == "neutral":
+                         eye_node.state_callback(String(data="listening"))
+                    else:
+                        eye_node.set_emotion(emotion)
         
         rclpy.spin_once(eye_node, timeout_sec=0.0)
         eye_node.update_animations()

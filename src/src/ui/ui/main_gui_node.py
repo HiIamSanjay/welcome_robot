@@ -13,6 +13,7 @@ from tkinter import ttk
 import webbrowser
 from gtts import gTTS
 import pygame
+import os
 
 # --- UI Configuration ---
 TIST_LOGO_URL = "https://tistcochin.edu.in/wp-content/uploads/2022/08/TISTlog-trans.png"
@@ -30,8 +31,11 @@ class MainGuiNode(Node):
         self.video_sub = self.create_subscription(Image, '/video_feed', self.video_callback, 10)
         self.user_text_sub = self.create_subscription(String, '/transcribed_text', self.user_text_callback, 10)
         self.ai_text_sub = self.create_subscription(String, '/ai_response', self.ai_text_callback, 10)
+        self.state_sub = self.create_subscription(String, '/robot_state', self.state_callback, 10)
+        
         self.text_input_publisher = self.create_publisher(String, '/transcribed_text', 10)
-        self.state_publisher = self.create_publisher(String, '/robot_state', 10)
+        # --- KEY CHANGE: Publisher to signal when TTS is finished ---
+        self.finished_speaking_publisher = self.create_publisher(String, '/finished_speaking', 10)
 
         self.bridge = CvBridge()
         self.latest_frame = None
@@ -43,22 +47,12 @@ class MainGuiNode(Node):
         pygame.mixer.init()
         self.get_logger().info("TTS engine set to gTTS with Pygame.")
 
-        # --- Start background tasks ---
         threading.Thread(target=self.load_logo, daemon=True).start()
         self.update_video()
-        
-        self.set_robot_state("listening")
-
-    def set_robot_state(self, state):
-        msg = String()
-        msg.data = state
-        self.state_publisher.publish(msg)
-        self.get_logger().info(f"Publishing robot state: {state}")
 
     def setup_ui(self):
         self.root.title("TIST AI Assistant")
-        # --- KEY CHANGE: Make the window fullscreen on the primary monitor ---
-        self.root.attributes('-fullscreen', True)
+        self.root.attributes('-fullscreen', True) # Make window fullscreen
         self.root.configure(bg=BG_COLOR)
         self.text_input_visible = False
 
@@ -109,7 +103,6 @@ class MainGuiNode(Node):
         if pygame.mixer.music.get_busy():
             pygame.mixer.music.stop()
             self.get_logger().info("TTS playback interrupted by user.")
-            self.set_robot_state("listening")
 
     def on_text_input_pressed(self):
         self.interrupt_speech()
@@ -124,19 +117,27 @@ class MainGuiNode(Node):
             return
 
         try:
-            self.set_robot_state("speaking")
+            self.get_logger().info("Speaking...")
             mp3_fp = io.BytesIO()
             tts = gTTS(text=text, lang='en', slow=False)
             tts.write_to_fp(mp3_fp)
             mp3_fp.seek(0)
+            
             pygame.mixer.music.load(mp3_fp)
+            pygame.mixer.music.set_volume(1.0)
             pygame.mixer.music.play()
+            
             while pygame.mixer.music.get_busy():
                 pygame.time.Clock().tick(10)
+
         except Exception as e:
             self.get_logger().error(f"Failed to play TTS audio: {e}")
         finally:
-            self.set_robot_state("listening")
+            # --- KEY CHANGE: Publish status when speaking is done ---
+            finished_msg = String()
+            finished_msg.data = "done"
+            self.finished_speaking_publisher.publish(finished_msg)
+            self.get_logger().info("Finished speaking and published status.")
 
     def toggle_text_input(self):
         if self.text_input_visible:
@@ -184,6 +185,10 @@ class MainGuiNode(Node):
         self.root.after(0, lambda: self.response_label.config(text=f"AI: {msg.data}"))
         threading.Thread(target=self.speak_text, args=(msg.data,), daemon=True).start()
 
+    def state_callback(self, msg):
+        if msg.data == "listening":
+            self.root.after(0, lambda: self.user_text_label.config(text="You: Listening..."))
+
     def update_video(self):
         if self.latest_frame is not None:
             frame = cv2.cvtColor(self.latest_frame, cv2.COLOR_BGR2RGB)
@@ -194,6 +199,8 @@ class MainGuiNode(Node):
         self.root.after(30, self.update_video)
 
 def main(args=None):
+    # This environment variable helps with some Tkinter/X11 issues
+    os.environ['GDK_BACKEND'] = 'x11'
     rclpy.init(args=args)
     root = tk.Tk()
     gui_node = MainGuiNode(root)

@@ -6,18 +6,16 @@ from ctypes import CFUNCTYPE, c_char_p, c_int, cdll
 import threading
 
 # --- Configuration ---
-MANUAL_ENERGY_THRESHOLD = 4000
-PAUSE_THRESHOLD = 2.0
-PHRASE_TIME_LIMIT = 15
+# Reduced pause threshold for faster phrase detection
+PAUSE_THRESHOLD = 0.5
 
 # --- Helper Functions ---
 def find_mic_by_name(target_name: str) -> int:
     """
-    Finds the device index for a microphone by its name, case-insensitively.
+    Finds the device index for a microphone by its name (case-insensitive).
     Returns the integer index or None if not found.
     """
     mic_list = sr.Microphone.list_microphone_names()
-    print("Available microphones:", mic_list) # Debug print
     for i, mic_name in enumerate(mic_list):
         if target_name.lower() in mic_name.lower():
             return i
@@ -48,41 +46,56 @@ class SpeechToTextNode(Node):
             10)
         
         self.recognizer = sr.Recognizer()
-        self.recognizer.energy_threshold = MANUAL_ENERGY_THRESHOLD
         self.recognizer.pause_threshold = PAUSE_THRESHOLD
-        
+        # --- KEY CHANGE: Explicitly set non_speaking_duration ---
+        # This ensures the recognizer finalizes a phrase after 0.6s of silence.
+        self.recognizer.non_speaking_duration = PAUSE_THRESHOLD
+        self.listener_lock = threading.Lock()
+
         mic_name = "Audio Array"
         self.get_logger().info(f"Searching for microphone named '{mic_name}'...")
-        mic_index = find_mic_by_name(mic_name)
+        self.mic_index = find_mic_by_name(mic_name)
         
-        if mic_index is None:
-            self.get_logger().error(f"Could not find microphone named '{mic_name}'. Falling back to default.")
-            self.microphone = sr.Microphone()
+        if self.mic_index is None:
+            self.get_logger().error(f"Could not find microphone named '{mic_name}'. Falling back to default index.")
         else:
-            self.get_logger().info(f"Found '{mic_name}' at device index {mic_index}.")
-            self.microphone = sr.Microphone(device_index=mic_index)
+            self.get_logger().info(f"Found '{mic_name}' at device index {self.mic_index}.")
 
-        self.stop_listening_function = None
-        # --- KEY CHANGE: Add a lock for thread safety ---
-        self.listener_lock = threading.Lock()
+        try:
+            with sr.Microphone(device_index=self.mic_index) as source:
+                self.get_logger().info("Calibrating microphone to ambient noise...")
+                self.recognizer.adjust_for_ambient_noise(source, duration=2.0)
+                self.recognizer.dynamic_energy_threshold = True
+                self.get_logger().info("Calibration complete. Dynamic energy threshold enabled.")
+        except Exception as e:
+            self.get_logger().error(f"Could not open microphone for calibration: {e}")
+            return
+
+        self.listener_handle = None
         self.get_logger().info("Speech-to-Text node initialized.")
 
     def state_callback(self, msg):
-        # --- KEY CHANGE: Use a lock to prevent race conditions ---
         with self.listener_lock:
-            if msg.data == "listening" and self.stop_listening_function is None:
+            if msg.data == "listening" and self.listener_handle is None:
                 self.get_logger().info("State: LISTENING. Starting background listener...")
                 try:
-                    self.stop_listening_function = self.recognizer.listen_in_background(
-                        self.microphone, self.recognition_callback, phrase_time_limit=PHRASE_TIME_LIMIT
+                    source = sr.Microphone(device_index=self.mic_index)
+                    stop_function = self.recognizer.listen_in_background(
+                        source, self.recognition_callback
                     )
+                    self.listener_handle = (stop_function, source)
                 except Exception as e:
                     self.get_logger().error(f"Failed to start listener: {e}")
 
-            elif msg.data == "speaking" and self.stop_listening_function is not None:
+            elif msg.data == "speaking" and self.listener_handle is not None:
                 self.get_logger().info("State: SPEAKING. Stopping background listener...")
-                self.stop_listening_function(wait_for_stop=False)
-                self.stop_listening_function = None
+                try:
+                    stop_function, _ = self.listener_handle
+                    stop_function(wait_for_stop=True)
+                except Exception as e:
+                    self.get_logger().error(f"Failed to stop listener cleanly: {e}")
+                finally:
+                    self.listener_handle = None
 
     def recognition_callback(self, recognizer, audio_data):
         self.get_logger().info("Phrase detected, preparing for recognition...")

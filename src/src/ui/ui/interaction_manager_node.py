@@ -3,105 +3,97 @@ from rclpy.node import Node
 from std_msgs.msg import String, Bool
 from rclpy.timer import Timer
 
-# The time in seconds to wait after the last person detection before stopping the interaction.
-INTERACTION_TIMEOUT_SEC = 15.0
-
 class InteractionManagerNode(Node):
     """
-    Manages the robot's interaction state based on person detection.
-    It controls when the robot should be listening for speech and what animations to show.
+    Manages the overall state of the robot's interaction with a user.
+    - Activates the microphone when a person is detected.
+    - Manages a grace period timer to keep the interaction alive if the person briefly disappears.
+    - Centralizes the logic for switching between 'listening' and 'speaking' states.
     """
     def __init__(self):
-        super().__init__('interaction_manager')
+        super().__init__('interaction_manager_node')
 
-        # State machine: 'idle' or 'interacting'
-        self.state = 'idle'
-        self.person_present = False
-        self.interaction_timer: Timer = None
-
-        # Subscribers
+        # --- Subscribers ---
         self.person_sub = self.create_subscription(
-            Bool,
-            '/person_detected_status',
-            self.person_callback,
-            10)
+            Bool, '/person_detected_status', self.person_callback, 10)
+        self.ai_response_sub = self.create_subscription(
+            String, '/ai_response', self.ai_response_callback, 10)
+        self.finished_speaking_sub = self.create_subscription(
+            String, '/finished_speaking', self.finished_speaking_callback, 10)
 
-        # Publishers
-        self.robot_state_pub = self.create_publisher(String, '/robot_state', 10)
-        self.emotion_pub = self.create_publisher(String, '/emotion', 10)
+        # --- Publisher ---
+        self.state_publisher = self.create_publisher(String, '/robot_state', 10)
 
-        self.get_logger().info('Interaction Manager started. Waiting for person detection.')
+        # --- State Management ---
+        self.is_active = False # Is there an ongoing interaction session?
+        self.is_person_present = False # Is a person currently detected?
+        self.grace_period_timer: Timer = None
+        self.interaction_timeout = 15.0 # Seconds
 
-    def person_callback(self, msg: Bool):
-        """Callback for when a person is detected or lost."""
-        self.person_present = msg.data
-        
-        if self.person_present:
-            # If a person is detected, always reset the interaction timer.
-            self.reset_interaction_timer()
+        self.get_logger().info("Interaction Manager started with improved state logic.")
 
-            # If we were previously idle, this is the start of a new interaction.
-            if self.state == 'idle':
+    def person_callback(self, msg):
+        """Handles changes in person detection."""
+        person_now_present = msg.data
+
+        if person_now_present and not self.is_person_present: # Person just appeared
+            self.get_logger().info("Person appeared.")
+            if self.grace_period_timer:
+                self.grace_period_timer.cancel()
+                self.grace_period_timer = None
+                self.get_logger().info("Grace period timer cancelled.")
+            if not self.is_active:
                 self.start_interaction()
+
+        elif not person_now_present and self.is_person_present: # Person just disappeared
+            self.get_logger().info("Person disappeared.")
+            if self.is_active:
+                self.get_logger().info(f"Starting {self.interaction_timeout}s grace period.")
+                if self.grace_period_timer: self.grace_period_timer.cancel()
+                self.grace_period_timer = self.create_timer(self.interaction_timeout, self.end_interaction)
         
-        # If a person is lost (msg.data is False), we do nothing immediately.
-        # The on_interaction_timeout method will handle stopping the interaction.
+        self.is_person_present = person_now_present
 
     def start_interaction(self):
-        """Begins an interaction sequence."""
-        self.get_logger().info('Person detected. Starting new interaction.')
-        self.state = 'interacting'
-        
-        # Show the "greet" animation once at the beginning.
-        greet_msg = String()
-        greet_msg.data = 'greet'
-        self.emotion_pub.publish(greet_msg)
-
-        # Tell the speech-to-text node to start listening.
-        listen_msg = String()
-        listen_msg.data = 'listening'
-        self.robot_state_pub.publish(listen_msg)
-
-    def reset_interaction_timer(self):
-        """Resets the 15-second countdown timer."""
-        # Cancel any existing timer to ensure we only have one running.
-        if self.interaction_timer is not None and not self.interaction_timer.is_canceled():
-            self.interaction_timer.cancel()
-        
-        # Create a new one-shot timer that will call on_interaction_timeout when it finishes.
-        self.interaction_timer = self.create_timer(
-            INTERACTION_TIMEOUT_SEC,
-            self.on_interaction_timeout)
-        self.get_logger().info(f'Interaction timer reset for {INTERACTION_TIMEOUT_SEC} seconds.')
-
-    def on_interaction_timeout(self):
-        """Called when 15 seconds have passed with no new person detection."""
-        self.get_logger().info('Interaction timer expired.')
-        
-        # Cleanly destroy the timer object.
-        if self.interaction_timer is not None:
-            self.interaction_timer.destroy()
-            self.interaction_timer = None
-
-        # Only end the interaction if the timer expires AND the person is no longer present.
-        if self.state == 'interacting' and not self.person_present:
-            self.end_interaction()
+        """Begins a new conversation session."""
+        self.get_logger().info("Interaction started.")
+        self.is_active = True
+        self.set_robot_state("listening")
 
     def end_interaction(self):
-        """Ends the interaction sequence and returns to idle state."""
-        self.get_logger().info('Person lost and timer expired. Ending interaction.')
-        self.state = 'idle'
+        """Ends the conversation session after a timeout."""
+        self.get_logger().info("Interaction ended due to timeout.")
+        self.is_active = False
+        if self.grace_period_timer:
+            self.grace_period_timer.cancel()
+            self.grace_period_timer = None
+        # No need to set state; the system will just go quiet.
 
-        # Tell the speech-to-text node to stop listening.
-        # The node uses the "speaking" state as the command to stop the microphone.
-        stop_listen_msg = String()
-        stop_listen_msg.data = 'speaking' 
-        self.robot_state_pub.publish(stop_listen_msg)
+    def ai_response_callback(self, msg):
+        """Sets the state to 'speaking' when the AI provides a response."""
+        if self.is_active:
+            self.get_logger().info("AI responded. Setting state to SPEAKING.")
+            self.set_robot_state("speaking")
+            # If the grace period timer was running, cancel it.
+            if self.grace_period_timer:
+                self.grace_period_timer.cancel()
+                self.grace_period_timer = None
 
-        # Set the eye animation back to neutral.
-        neutral_msg = String()
-        neutral_msg.data = 'neutral'
-        self.emotion_pub.publish(neutral_msg)
+    def finished_speaking_callback(self, msg):
+        """Returns the robot to the 'listening' state after it has spoken."""
+        self.get_logger().info("GUI finished speaking.")
+        # --- KEY CHANGE ---
+        # If the interaction is still active, always return to listening.
+        # The grace period timer will handle ending the interaction if the person is gone.
+        if self.is_active:
+            self.get_logger().info("Returning to LISTENING state.")
+            self.set_robot_state("listening")
+
+    def set_robot_state(self, state: str):
+        """Publishes a new state to the /robot_state topic."""
+        msg = String()
+        msg.data = state
+        self.state_publisher.publish(msg)
 
 def main(args=None):
     rclpy.init(args=args)
@@ -112,4 +104,5 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
 
