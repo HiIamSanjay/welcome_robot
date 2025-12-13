@@ -1,0 +1,87 @@
+Here is the complete guide to installing, running, and turning off your dual-monitor setup.
+
+### Part 1: One-Time Setup (Do this once)
+
+These steps configure the "Ghost Monitor" and prepare the VNC server.
+
+1.  **Configure the Ghost Monitor:**
+    Open the terminal and edit the boot file:
+
+    ```bash
+    sudo nano /boot/firmware/cmdline.txt
+    ```
+
+    Add this exact text to the very end of the line (do not create a new line):
+
+    ```text
+     video=HDMI-A-1:1280x720@60 video=HDMI-A-2:1920x1080@60D
+    ```
+
+    *Save and Exit (`Ctrl+O`, `Enter`, `Ctrl+X`).*
+
+2.  **Disable Wayland (Required for VNC):**
+    Open the GDM3 config:
+
+    ```bash
+    sudo nano /etc/gdm3/custom.conf
+    ```
+
+    Find `#WaylandEnable=false` and remove the `#` so it looks like:
+
+    ```text
+    WaylandEnable=false
+    ```
+
+    *Save and Exit.*
+
+3.  **Install VNC Server:**
+
+    ```bash
+    sudo apt update
+    sudo apt install x11vnc -y
+    ```
+
+4.  **Reboot:**
+
+    ```bash
+    sudo reboot
+    ```
+
+-----
+
+### Part 2: Running It (Do this every time)
+
+Whenever you want to use your laptop as the second screen:
+
+1.  **On the Raspberry Pi (Start the Server):**
+    Run this command to broadcast *only* the Ghost Monitor (Left Screen):
+
+    ```bash
+    x11vnc -display :0 -clip 1920x1080+0+0 -forever -shared -noxdamage -ncache 10
+    ```
+
+2.  **On Your Laptop (Connect the Viewer):**
+
+      * Open **Remmina**.
+      * Select **VNC** protocol.
+      * Enter IP: `[Pi_IP_Address]:5900` (e.g., `192.168.1.5:5900`).
+      * **Important:** Edit settings and set **Color Depth** to "High Color (16 bpp)" to fix lag.
+      * Connect.
+
+-----
+
+### Part 3: Turning It Off
+
+**To stop the session temporarily:**
+
+  * In the Pi terminal running the command, press **`Ctrl + C`**.
+  * This stops the broadcast. Your Pi will still "think" it has two screens, so your mouse might still go off the edge into the void.
+
+**To remove the second screen permanently (Revert to Single Monitor):**
+
+1.  Open `cmdline.txt` again:
+    ```bash
+    sudo nano /boot/firmware/cmdline.txt
+    ```
+2.  **Delete** the text you added (`video=HDMI-A-1...`).
+3.  Save and Reboot. The Pi will return to a normal single-screen setup.
