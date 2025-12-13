@@ -17,6 +17,23 @@ def generate_launch_description():
         parameters=[{'use_sim_time': False}],
     )
 
+    # --- COORDINATE CALCULATION FOR SECONDARY DISPLAY ---
+    # Assumption: 
+    #   Display 1: 1920x1080 (Laptop, Left)
+    #   Display 2: 1280x720 (External, Right)
+    #   App Window: 1280x720
+    #
+    # X Position = Width of Display 1 (1920) + Offset to center on Display 2
+    # Offset X = (1280 - 1280) / 2 = 0
+    # Total X = 1920 + 0 = 1920
+    #
+    # Y Position = Offset to center vertically on Display 2
+    # Offset Y = (720 - 720) / 2 = 0
+    #
+    # Result: 1920,1080
+    
+    # NOTE: If this doesn't work, try "1920,1080" to just put it at the top-left of screen 2.
+    
     eye_animation_node = Node(
         package='ui',
         executable='eye_animation',
@@ -26,14 +43,14 @@ def generate_launch_description():
         respawn_delay=2.0,
         emulate_tty=True,
         parameters=[{'use_sim_time': False}],
-        prefix="env SDL_VIDEO_WINDOW_POS=1920,557"
+        # Using env to set the position for SDL/Pygame
+        prefix="env SDL_VIDEO_WINDOW_POS=1920,1080" 
     )
 
-    # --- ADDED INTERACTION MANAGER ---
-    # This new node will manage the overall interaction flow.
+    # --- INTERACTION MANAGER ---
     interaction_manager_node = Node(
-        package='ui', # Assuming the new node is in your 'ui' package
-        executable='interaction_manager', # This must match your script's executable name
+        package='ui', 
+        executable='interaction_manager', 
         name='interaction_manager_node',
         output='screen',
         respawn=True,
@@ -43,5 +60,5 @@ def generate_launch_description():
     return LaunchDescription([
         main_gui_node,
         eye_animation_node,
-        interaction_manager_node, # Add the new node to the launch list
+        interaction_manager_node, 
     ])
