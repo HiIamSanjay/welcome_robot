@@ -26,7 +26,7 @@ setup(
             'gemini_node = ai.gemini_node:main',
             'emotion_recognition = ai.emotion_recognition_node:main',
             'person_detection = ai.person_detection_node:main',
+            'performance_logger_node = ai.performance_logger_node:main',
         ],
     },
 )
-

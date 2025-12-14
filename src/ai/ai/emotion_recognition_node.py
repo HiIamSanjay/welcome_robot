@@ -8,44 +8,51 @@ import face_recognition
 import threading
 import numpy as np
 from deepface import DeepFace
+import time
+
 
 class EmotionRecognitionNode(Node):
     """
     Analyzes faces for emotions, but only when activated by a control message
     on the /emotion_recognition_control topic.
     """
+
     def __init__(self):
         super().__init__('emotion_recognition_node')
-        
+
         # --- Subscribers and Publishers ---
-        self.video_subscription = self.create_subscription(Image, '/video_feed', self.video_callback, 10)
+        self.video_subscription = self.create_subscription(
+            Image, '/video_feed', self.video_callback, 10)
         self.emotion_publisher = self.create_publisher(String, '/emotion', 10)
-        
+
         self.control_subscription = self.create_subscription(
             String,
             '/emotion_recognition_control',
             self.control_callback,
             10)
-            
+
         self.bridge = CvBridge()
         self.last_emotion = "neutral"
-        
+
         self.is_active = False
-        
+
         self.frame_lock = threading.Lock()
         self.latest_frame = None
-        
+
         self.analysis_timer = self.create_timer(1.0, self.analyze_frame)
-        
+
         self.get_logger().info("Emotion Recognition node started. Waiting for activation command.")
         threading.Thread(target=self.preload_model, daemon=True).start()
+        self.perf_publisher = self.create_publisher(
+            String, '/performance_metrics', 10)
 
     def preload_model(self):
         """Preloads the DeepFace model to reduce the first analysis delay."""
         dummy_frame = np.zeros((224, 224, 3), dtype=np.uint8)
         try:
             self.get_logger().info("Preloading DeepFace emotion model...")
-            DeepFace.analyze(dummy_frame, actions=['emotion'], enforce_detection=False)
+            DeepFace.analyze(dummy_frame, actions=[
+                             'emotion'], enforce_detection=False)
             self.get_logger().info("DeepFace model loaded successfully.")
         except Exception as e:
             self.get_logger().warn(f"Could not preload model: {e}")
@@ -83,24 +90,37 @@ class EmotionRecognitionNode(Node):
         if frame_to_analyze is None:
             return
 
-        threading.Thread(target=self.run_deepface_analysis, args=(frame_to_analyze,), daemon=True).start()
+        threading.Thread(target=self.run_deepface_analysis,
+                         args=(frame_to_analyze,), daemon=True).start()
 
     def run_deepface_analysis(self, frame):
-        """The actual emotion analysis logic."""
+        start_time = time.time()  # <--- START TIMER
         try:
-            analysis = DeepFace.analyze(frame, actions=['emotion'], enforce_detection=False)
-            
+            # The heavy operation
+            analysis = DeepFace.analyze(
+                frame, actions=['emotion'], enforce_detection=False)
+
             if analysis and isinstance(analysis, list) and analysis[0]:
                 detected_emotion = analysis[0]['dominant_emotion']
-                
+
                 if detected_emotion != self.last_emotion:
                     self.last_emotion = detected_emotion
                     msg = String()
                     msg.data = detected_emotion
                     self.emotion_publisher.publish(msg)
-                    self.get_logger().info(f'Detected Emotion for Mirroring: "{detected_emotion}"')
+                    self.get_logger().info(
+                        f'Detected Emotion for Mirroring: "{detected_emotion}"')
         except Exception:
             pass
+        finally:
+            end_time = time.time()  # <--- END TIMER
+            duration = end_time - start_time
+
+            # Publish the metric
+            msg = String()
+            msg.data = f"emotion_node,deepface_analyze,{duration:.4f}"
+            self.perf_publisher.publish(msg)
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -109,7 +129,6 @@ def main(args=None):
     emotion_node.destroy_node()
     rclpy.shutdown()
 
+
 if __name__ == '__main__':
     main()
-
-
