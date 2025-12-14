@@ -4,7 +4,7 @@ from std_msgs.msg import String
 import google.generativeai as genai
 
 # --- Configuration Constants ---
-GEMINI_API_KEY = "AIzaSyDGJ8yCCmbfSqOiFSaYQd7pFqsatTpThN8"
+GEMINI_API_KEY = ""
 GEMINI_MODEL = "gemini-2.5-flash"
 
 # --- Keyword Lists (from your reference script) ---
